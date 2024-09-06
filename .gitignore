@@ -1,2 +1,5 @@
-*__pacache__
+*__pycache__
 cells.xlsx
+venv
+*.DS_Store
+*.xlsx

@@ -94,12 +94,16 @@ class Window(QtWidgets.QWidget):
         self.right_layout.addWidget(self.plot)
         self.button_layout = QtWidgets.QHBoxLayout()
         self.result_button = QtWidgets.QPushButton('Result')
+        self.result_button.setToolTip("Произвести рассчет")
         self.result_button.clicked.connect(self.calculate_results)
         self.clean_rn_button = QtWidgets.QPushButton('Clean Rn')
+        self.clean_rn_button.setToolTip("Очистить Rn")
         self.clean_rn_button.clicked.connect(self.clean_rn)
         self.clean_all_button = QtWidgets.QPushButton('Clean All')
+        self.clean_all_button.setToolTip("Очистить все данные")
         self.clean_all_button.clicked.connect(self.clean_all)
-        self.save_button = QtWidgets.QPushButton('Save')
+        self.save_button = QtWidgets.QPushButton('Save All data')
+        self.save_button.setToolTip("Сохранить входные данные и рассчет")
         self.save_button.clicked.connect(self.save_data)
         self.button_layout.addWidget(self.result_button)
         self.button_layout.addWidget(self.clean_rn_button)
@@ -118,7 +122,8 @@ class Window(QtWidgets.QWidget):
                 button.clicked.connect(lambda checked=False, row=i, col=j: self.cell_button_clicked(row, col))
                 self.cell_layout.addWidget(button, i, j)
                 self.cell_buttons.append(button)
-        self.cell_save_button = QtWidgets.QPushButton('S')
+        self.cell_save_button = QtWidgets.QPushButton('Save cells RnS')
+        self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
         self.right_layout.addLayout(self.cell_layout)
@@ -127,8 +132,8 @@ class Window(QtWidgets.QWidget):
         self.setLayout(self.layout)
 
         # Set the values for the first column of the parameter table
-        self.param_table.setItem(0, 0, QtWidgets.QTableWidgetItem('k'))
-        self.param_table.setItem(1, 0, QtWidgets.QTableWidgetItem('b'))
+        self.param_table.setItem(0, 0, QtWidgets.QTableWidgetItem('Slope'))
+        self.param_table.setItem(1, 0, QtWidgets.QTableWidgetItem('Intercept'))
         self.param_table.setItem(2, 0, QtWidgets.QTableWidgetItem('Уход'))
         self.param_table.setItem(3, 0, QtWidgets.QTableWidgetItem('RnS'))
         self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
@@ -197,22 +202,26 @@ class Window(QtWidgets.QWidget):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
         file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Data", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
-        if file_name:
-            wb = openpyxl.Workbook()
-            ws1 = wb.active
-            ws1.title = "Data"
-            headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
-            ws1.append(headers)
-            for row in range(self.table.rowCount()):
-                data = [self.table.item(row, col).text() for col in range(self.table.columnCount())]
-                ws1.append(data)
-            ws2 = wb.create_sheet("Results")
-            headers = [self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())]
-            ws2.append(headers)
-            for row in range(self.param_table.rowCount()):
-                data = [self.param_table.item(row, col).text() for col in range(self.param_table.columnCount())]
-                ws2.append(data)
-            wb.save(filename=file_name)
+        if not file_name:
+            return
+        wb = openpyxl.Workbook()
+        ws1 = wb.active
+        ws1.title = "Data"
+        headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
+        ws1.append(headers)
+        for row in range(self.table.rowCount()):
+            data = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in range(self.table.columnCount())]
+            ws1.append(data)
+        ws2 = wb.create_sheet("Results")
+        headers = [self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())]
+        ws2.append(headers)
+        for row in range(self.param_table.rowCount()):
+            data = [self.param_table.item(row, col).text() if self.param_table.item(row, col) else '' for col in range(self.param_table.columnCount())]
+            ws2.append(data)
+
+        if not file_name.endswith('.xlsx'):
+            file_name += '.xlsx'
+        wb.save(filename=file_name)
 
     def clean_rn(self):
         for row in range(self.table.rowCount()):
@@ -241,21 +250,41 @@ class Window(QtWidgets.QWidget):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
         file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Cell Data", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
-        if file_name:
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Cell Data"
-            headers = ['Cell', 'Series', 'Уход', 'RnS']
-            ws.append(headers)
-            for i, button in enumerate(self.cell_buttons):
-                text = button.text()
-                if text:
-                    series = text.split('\n')[0].split(': ')[1]
-                    uhod = text.split('\n')[1].split(': ')[1]
-                    rns = text.split('\n')[2].split(': ')[1]
-                    data = [f'Cell {i+1}', series, uhod, rns]
-                    ws.append(data)
-            wb.save(filename=file_name)
+        if not file_name:
+            return
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Cell Data"
+
+        def parse_btn_text(btn):
+            text = btn.text()
+            series = text.split("\n")[0].split(": ")[1] if "Серия" in text else text
+            care = text.split("\n")[1].split(": ")[1] if "Уход" in text else ""
+            rns = text.split("\n")[2].split(": ")[1] if "RnS" in text else ""
+            return [series, care, rns]
+
+        init_data = [parse_btn_text(btn) for btn in self.cell_buttons]
+        output = []
+
+        # Разделение исходного массива на блоки по 4 строки
+        blocks = [init_data[i:i+4] for i in range(0, len(init_data), 4)]
+
+        # Обработка каждого блока
+        for block in blocks:
+            # Перестановка элементов в блоке
+            block_transposed = list(map(list, zip(*block)))
+            # Добавление переставленного блока в выходной массив
+            output.extend(block_transposed)
+        output = np.array(output)
+        for row_ind, row in enumerate(output, 1):
+            for col_ind, coll in enumerate(row, 1):
+                ws.cell(row=row_ind, column=col_ind, value=coll)
+
+        # Save the Excel file
+        if not file_name.endswith('.xlsx'):
+            file_name += '.xlsx'
+        wb.save(filename=file_name)
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Enter or event.key() == QtCore.Qt.Key_Return:
