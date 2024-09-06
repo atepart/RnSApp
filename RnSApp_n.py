@@ -6,6 +6,17 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from utils import linear, linear_fit
 
+class BackgroundDelegate(QtWidgets.QStyledItemDelegate):
+    def __init__(self, color, parent=None):
+        super(BackgroundDelegate, self).__init__(parent)
+        self.color = color
+
+    def paint(self, painter, option, index):
+        painter.save()
+        painter.fillRect(option.rect, self.color)
+        painter.restore()
+        super(BackgroundDelegate, self).paint(painter, option, index)
+
 class Table(QtWidgets.QTableWidget):
     def __init__(self, rows, columns):
         super(Table, self).__init__(rows, columns)
@@ -19,6 +30,25 @@ class Table(QtWidgets.QTableWidget):
         self.setShowGrid(True)
         self.setGridStyle(QtCore.Qt.SolidLine)
 
+        # Set columns 0, 2, 4, and 5 as read-only
+        self.set_read_only_columns([0, 2, 5])
+
+        # Set background color for Diameter and Resistance columns
+        diameter_column = 3
+        resistance_column = 4
+        diameter_delegate = self.itemDelegateForColumn(diameter_column)
+        resistance_delegate = self.itemDelegateForColumn(resistance_column)
+        if diameter_delegate is not None:
+            diameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
+        if resistance_delegate is not None:
+            resistance_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
+
+    def set_read_only_columns(self, columns):
+        for col in columns:
+            if col != 4:  # Make the Resistance column editable
+                delegate = ReadOnlyDelegate(self)
+                self.setItemDelegateForColumn(col, delegate)
+
     def update_table(self, item):
         self.itemChanged.disconnect(self.update_table)
         row = item.row()
@@ -27,12 +57,20 @@ class Table(QtWidgets.QTableWidget):
             if col == 3:  # Diameter
                 if self.item(row, 4) is not None:
                     resistance = float(self.item(row, 4).text())
-                    rn_sqrt = 1 / np.sqrt(resistance)
-                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                    if resistance != 0:  # Check if resistance is not equal to 0
+                        rn_sqrt = 1 / np.sqrt(resistance)
+                        self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                    else:
+                        self.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+                        self.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
             elif col == 4:  # Resistance
                 resistance = float(item.text())
-                rn_sqrt = 1 / np.sqrt(resistance)
-                self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                if resistance != 0:  # Check if resistance is not equal to 0
+                    rn_sqrt = 1 / np.sqrt(resistance)
+                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                else:
+                    self.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         except ValueError:
             pass
         self.itemChanged.connect(self.update_table)
@@ -47,7 +85,8 @@ class Table(QtWidgets.QTableWidget):
             selected_items = self.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
+                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
+                        self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.parent().update_plot()
         elif event.matches(QtGui.QKeySequence.Paste):
             self.paste_data()
@@ -95,16 +134,21 @@ class Window(QtWidgets.QWidget):
         self.button_layout = QtWidgets.QHBoxLayout()
         self.result_button = QtWidgets.QPushButton('Result')
         self.result_button.setToolTip("Произвести рассчет")
+        self.result_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.result_button.clicked.connect(self.calculate_results)
-        self.clean_rn_button = QtWidgets.QPushButton('Clean Rn')
+        self.clean_rn_button = QtWidgets.QPushButton('Clear Rn')
         self.clean_rn_button.setToolTip("Очистить Rn")
+        self.clean_rn_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.clean_rn_button.clicked.connect(self.clean_rn)
-        self.clean_all_button = QtWidgets.QPushButton('Clean All')
+        self.clean_all_button = QtWidgets.QPushButton('Clear All')
         self.clean_all_button.setToolTip("Очистить все данные")
         self.clean_all_button.clicked.connect(self.clean_all)
         self.save_button = QtWidgets.QPushButton('Save All data')
         self.save_button.setToolTip("Сохранить входные данные и рассчет")
+        self.clean_all_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
+        self.save_button = QtWidgets.QPushButton('Save')
         self.save_button.clicked.connect(self.save_data)
+        self.save_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.button_layout.addWidget(self.result_button)
         self.button_layout.addWidget(self.clean_rn_button)
         self.button_layout.addWidget(self.clean_all_button)
@@ -114,6 +158,7 @@ class Window(QtWidgets.QWidget):
         self.result_table.setHorizontalHeaderLabels(['Number', 'Name', 'RnS', 'Diameter (μm)', 'Resistance (Ω)', 'Rn^-0.5'])
         self.result_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.result_table.verticalHeader().setVisible(False)
+        self.result_table.setItemDelegateForColumn(0, ReadOnlyDelegate(self))  # Set the first column as read-only
         self.cell_layout = QtWidgets.QGridLayout()
         self.cell_buttons = []
         for i in range(4):
@@ -125,6 +170,7 @@ class Window(QtWidgets.QWidget):
         self.cell_save_button = QtWidgets.QPushButton('Save cells RnS')
         self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
+        self.cell_save_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
         self.right_layout.addLayout(self.cell_layout)
         self.layout.addWidget(self.table)
@@ -138,8 +184,46 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(3, 0, QtWidgets.QTableWidgetItem('RnS'))
         self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
 
+        # Set background color for RnS, Rn^-0.5 columns in the data table
+        rn_s_column = 2
+        rn_sqrt_column = 5
+        rn_s_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
+        rn_sqrt_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
+        self.table.setItemDelegateForColumn(rn_s_column, rn_s_delegate)
+        self.table.setItemDelegateForColumn(rn_sqrt_column, rn_sqrt_delegate)
+
+        # Set background color for Value column in the result table
+        value_column = 1
+        value_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
+        self.result_table.setItemDelegateForColumn(value_column, value_delegate)
+
+        # Set background color for Number column in the data table
+        number_column = 0
+        number_delegate = BackgroundDelegate(QtGui.QColor(192, 192, 192, 128))
+        self.table.setItemDelegateForColumn(number_column, number_delegate)
+
+        # Set background color for Parameter column in the result table
+        parameter_column = 0
+        parameter_delegate = BackgroundDelegate(QtGui.QColor(192, 192, 192, 128))
+        self.param_table.setItemDelegateForColumn(parameter_column, parameter_delegate)
+
     def calculate_results(self):
         self.update_plot()
+        # Update the RnS column in the table
+        for row in range(self.table.rowCount()):
+            item_diameter = self.table.item(row, 3)
+            item_rn = self.table.item(row, 4)
+            if item_diameter is not None and item_diameter.text() and item_rn is not None and item_rn.text():
+                try:
+                    diameter = float(item_diameter.text())
+                    rn = float(item_rn.text())
+                    zero_x = float(self.param_table.item(2, 1).text())  # Get the Уход value from the parameter table
+                    rns_value = rn * 0.25 * math.pi * (diameter - zero_x) ** 2
+                    self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(str(round(rns_value, 4))))
+                except ValueError:
+                    pass
+        # Update the result table
+        self.update_result_table()
 
     def update_plot(self):
         x = []
@@ -175,19 +259,6 @@ class Window(QtWidgets.QWidget):
             y_mean = np.mean(y)
             deviation = np.mean(np.abs(y - y_mean))
             self.param_table.setItem(4, 1, QtWidgets.QTableWidgetItem(str(round(deviation, 4))))
-
-            # Update the RnS column in the table
-            for i in range(self.table.rowCount()):
-                item_diameter = self.table.item(i, 3)
-                item_rn = self.table.item(i, 4)
-                if item_diameter is not None and item_diameter.text() and item_rn is not None and item_rn.text():
-                    try:
-                        diameter = float(item_diameter.text())
-                        rn = float(item_rn.text())
-                        rns_value = rn *0.25 * math.pi * (diameter - zero_x) ** 2
-                        self.table.setItem(i, 2, QtWidgets.QTableWidgetItem(str(round(rns_value, 4))))
-                    except ValueError:
-                        pass
 
     def prepare_plot(self):
         self.plot.setBackground("w")
@@ -225,17 +296,18 @@ class Window(QtWidgets.QWidget):
 
     def clean_rn(self):
         for row in range(self.table.rowCount()):
-            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))
-            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))
-            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))
-        self.param_table.clearContents()
+            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
+            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.plot.clear()
 
     def clean_all(self):
         for row in range(self.table.rowCount()):
-            for col in range(1, self.table.columnCount()):
-                self.table.setItem(row, col, QtWidgets.QTableWidgetItem(''))
-        self.param_table.clearContents()
+            self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(''))  # Clear Name column
+            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+            self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(''))  # Clear Diameter column
+            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
+            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.plot.clear()
 
     def cell_button_clicked(self, row, col):
@@ -296,10 +368,20 @@ class Window(QtWidgets.QWidget):
             selected_items = self.table.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    self.table.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
+                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
+                        self.table.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.update_plot()
         else:
             super(Window, self).keyPressEvent(event)
+
+    def update_result_table(self):
+        # Update the result table with the calculated values
+        self.result_table.setRowCount(self.table.rowCount())
+        for row in range(self.table.rowCount()):
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item is not None:
+                    self.result_table.setItem(row, col, QtWidgets.QTableWidgetItem(item.text()))
 
 app = QtWidgets.QApplication(sys.argv)
 window = Window()
