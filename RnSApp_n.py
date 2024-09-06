@@ -35,12 +35,20 @@ class Table(QtWidgets.QTableWidget):
             if col == 3:  # Diameter
                 if self.item(row, 4) is not None:
                     resistance = float(self.item(row, 4).text())
-                    rn_sqrt = 1 / np.sqrt(resistance)
-                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                    if resistance != 0:  # Check if resistance is not equal to 0
+                        rn_sqrt = 1 / np.sqrt(resistance)
+                        self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                    else:
+                        self.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+                        self.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
             elif col == 4:  # Resistance
                 resistance = float(item.text())
-                rn_sqrt = 1 / np.sqrt(resistance)
-                self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                if resistance != 0:  # Check if resistance is not equal to 0
+                    rn_sqrt = 1 / np.sqrt(resistance)
+                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+                else:
+                    self.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         except ValueError:
             pass
         self.itemChanged.connect(self.update_table)
@@ -104,9 +112,9 @@ class Window(QtWidgets.QWidget):
         self.button_layout = QtWidgets.QHBoxLayout()
         self.result_button = QtWidgets.QPushButton('Result')
         self.result_button.clicked.connect(self.calculate_results)
-        self.clean_rn_button = QtWidgets.QPushButton('Clean Rn')
+        self.clean_rn_button = QtWidgets.QPushButton('Clear Rn')
         self.clean_rn_button.clicked.connect(self.clean_rn)
-        self.clean_all_button = QtWidgets.QPushButton('Clean All')
+        self.clean_all_button = QtWidgets.QPushButton('Clear All')
         self.clean_all_button.clicked.connect(self.clean_all)
         self.save_button = QtWidgets.QPushButton('Save')
         self.save_button.clicked.connect(self.save_data)
@@ -231,15 +239,16 @@ class Window(QtWidgets.QWidget):
     def clean_rn(self):
         for row in range(self.table.rowCount()):
             self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
-            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
             self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.param_table.clearContents()
         self.plot.clear()
 
     def clean_all(self):
         for row in range(self.table.rowCount()):
-            for col in range(1, self.table.columnCount()):  # Start from column 1 to skip the first column
-                self.table.setItem(row, col, QtWidgets.QTableWidgetItem(''))
+            self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(''))  # Clear Name column
+            self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(''))  # Clear Diameter column
+            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.param_table.clearContents()
         self.plot.clear()
 
