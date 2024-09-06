@@ -19,8 +19,8 @@ class Table(QtWidgets.QTableWidget):
         self.setShowGrid(True)
         self.setGridStyle(QtCore.Qt.SolidLine)
 
-        # Set columns 0, 2, and 5 as read-only
-        self.set_read_only_columns([0, 2, 5])
+        # Set columns 0, 2, 4, and 5 as read-only
+        self.set_read_only_columns([0, 2, 4, 5])
 
     def set_read_only_columns(self, columns):
         for col in columns:
@@ -63,7 +63,7 @@ class Table(QtWidgets.QTableWidget):
             selected_items = self.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
+                    if item.column() not in [0, 2, 4, 5]:  # Disable delete for columns 0, 2, 4, and 5
                         self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.parent().update_plot()
         elif event.matches(QtGui.QKeySequence.Paste):
@@ -151,12 +151,22 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
 
     def calculate_results(self):
-        # Clear the data in columns 2 and 5
-        for row in range(self.table.rowCount()):
-            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))
-            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))
-
         self.update_plot()
+        # Update the RnS column in the table
+        for row in range(self.table.rowCount()):
+            item_diameter = self.table.item(row, 3)
+            item_rn = self.table.item(row, 4)
+            if item_diameter is not None and item_diameter.text() and item_rn is not None and item_rn.text():
+                try:
+                    diameter = float(item_diameter.text())
+                    rn = float(item_rn.text())
+                    zero_x = float(self.param_table.item(2, 1).text())  # Get the Уход value from the parameter table
+                    rns_value = rn * 0.25 * math.pi * (diameter - zero_x) ** 2
+                    self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(str(round(rns_value, 4))))
+                except ValueError:
+                    pass
+        # Update the result table
+        self.update_result_table()
 
     def update_plot(self):
         x = []
@@ -193,19 +203,6 @@ class Window(QtWidgets.QWidget):
             deviation = np.mean(np.abs(y - y_mean))
             self.param_table.setItem(4, 1, QtWidgets.QTableWidgetItem(str(round(deviation, 4))))
 
-            # Update the RnS column in the table
-            for i in range(self.table.rowCount()):
-                item_diameter = self.table.item(i, 3)
-                item_rn = self.table.item(i, 4)
-                if item_diameter is not None and item_diameter.text() and item_rn is not None and item_rn.text():
-                    try:
-                        diameter = float(item_diameter.text())
-                        rn = float(item_rn.text())
-                        rns_value = rn *0.25 * math.pi * (diameter - zero_x) ** 2
-                        self.table.setItem(i, 2, QtWidgets.QTableWidgetItem(str(round(rns_value, 4))))
-                    except ValueError:
-                        pass
-
     def prepare_plot(self):
         self.plot.setBackground("w")
         self.plot.setTitle(self.plot_title, color="#413C58", size="10pt")
@@ -239,6 +236,7 @@ class Window(QtWidgets.QWidget):
     def clean_rn(self):
         for row in range(self.table.rowCount()):
             self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
             self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.param_table.clearContents()
         self.plot.clear()
@@ -246,8 +244,9 @@ class Window(QtWidgets.QWidget):
     def clean_all(self):
         for row in range(self.table.rowCount()):
             self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(''))  # Clear Name column
-            self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(''))  # Clear Diameter column
             self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+            self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(''))  # Clear Diameter column
+            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
             self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.param_table.clearContents()
         self.plot.clear()
@@ -290,10 +289,20 @@ class Window(QtWidgets.QWidget):
             selected_items = self.table.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    self.table.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
+                    if item.column() not in [0, 2, 4, 5]:  # Disable delete for columns 0, 2, 4, and 5
+                        self.table.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.update_plot()
         else:
             super(Window, self).keyPressEvent(event)
+
+    def update_result_table(self):
+        # Update the result table with the calculated values
+        self.result_table.setRowCount(self.table.rowCount())
+        for row in range(self.table.rowCount()):
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item is not None:
+                    self.result_table.setItem(row, col, QtWidgets.QTableWidgetItem(item.text()))
 
 app = QtWidgets.QApplication(sys.argv)
 window = Window()
