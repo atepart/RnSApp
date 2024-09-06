@@ -24,8 +24,9 @@ class Table(QtWidgets.QTableWidget):
 
     def set_read_only_columns(self, columns):
         for col in columns:
-            delegate = ReadOnlyDelegate(self)
-            self.setItemDelegateForColumn(col, delegate)
+            if col != 4:  # Make the Resistance column editable
+                delegate = ReadOnlyDelegate(self)
+                self.setItemDelegateForColumn(col, delegate)
 
     def update_table(self, item):
         self.itemChanged.disconnect(self.update_table)
@@ -127,6 +128,7 @@ class Window(QtWidgets.QWidget):
         self.result_table.setHorizontalHeaderLabels(['Number', 'Name', 'RnS', 'Diameter (μm)', 'Resistance (Ω)', 'Rn^-0.5'])
         self.result_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.result_table.verticalHeader().setVisible(False)
+        self.result_table.setItemDelegateForColumn(0, ReadOnlyDelegate(self))  # Set the first column as read-only
         self.cell_layout = QtWidgets.QGridLayout()
         self.cell_buttons = []
         for i in range(4):
