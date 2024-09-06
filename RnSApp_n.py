@@ -230,15 +230,15 @@ class Window(QtWidgets.QWidget):
 
     def clean_rn(self):
         for row in range(self.table.rowCount()):
-            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))
-            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))
-            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))
+            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
+            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
+            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
         self.param_table.clearContents()
         self.plot.clear()
 
     def clean_all(self):
         for row in range(self.table.rowCount()):
-            for col in range(1, self.table.columnCount()):
+            for col in range(1, self.table.columnCount()):  # Start from column 1 to skip the first column
                 self.table.setItem(row, col, QtWidgets.QTableWidgetItem(''))
         self.param_table.clearContents()
         self.plot.clear()
