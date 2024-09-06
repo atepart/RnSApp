@@ -143,6 +143,7 @@ class Window(QtWidgets.QWidget):
         self.param_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.param_table.verticalHeader().setVisible(False)
         self.param_table.setItemDelegateForColumn(0, ReadOnlyDelegate(self))
+        self.param_table.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
 
         # Экшнс кнопки
         self.actions_group = QtWidgets.QGroupBox("Actions")
