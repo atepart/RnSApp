@@ -20,7 +20,15 @@ class Table(QtWidgets.QTableWidget):
         self.setGridStyle(QtCore.Qt.SolidLine)
 
         # Set columns 0, 2, 4, and 5 as read-only
-        self.set_read_only_columns([0, 2, 4, 5])
+        self.set_read_only_columns([0, 2, 5])
+
+        # Set background color for Diameter and Resistance columns
+        diameter_column = 3
+        resistance_column = 4
+        diameter_delegate = self.itemDelegateForColumn(diameter_column)
+        resistance_delegate = self.itemDelegateForColumn(resistance_column)
+        diameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
+        resistance_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
 
     def set_read_only_columns(self, columns):
         for col in columns:
@@ -64,7 +72,7 @@ class Table(QtWidgets.QTableWidget):
             selected_items = self.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    if item.column() not in [0, 2, 4, 5]:  # Disable delete for columns 0, 2, 4, and 5
+                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
                         self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.parent().update_plot()
         elif event.matches(QtGui.QKeySequence.Paste):
@@ -113,12 +121,16 @@ class Window(QtWidgets.QWidget):
         self.button_layout = QtWidgets.QHBoxLayout()
         self.result_button = QtWidgets.QPushButton('Result')
         self.result_button.clicked.connect(self.calculate_results)
+        self.result_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.clean_rn_button = QtWidgets.QPushButton('Clear Rn')
         self.clean_rn_button.clicked.connect(self.clean_rn)
+        self.clean_rn_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.clean_all_button = QtWidgets.QPushButton('Clear All')
         self.clean_all_button.clicked.connect(self.clean_all)
+        self.clean_all_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.save_button = QtWidgets.QPushButton('Save')
         self.save_button.clicked.connect(self.save_data)
+        self.save_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.button_layout.addWidget(self.result_button)
         self.button_layout.addWidget(self.clean_rn_button)
         self.button_layout.addWidget(self.clean_all_button)
@@ -139,6 +151,7 @@ class Window(QtWidgets.QWidget):
                 self.cell_buttons.append(button)
         self.cell_save_button = QtWidgets.QPushButton('S')
         self.cell_save_button.clicked.connect(self.save_cell_data)
+        self.cell_save_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
         self.right_layout.addLayout(self.cell_layout)
         self.layout.addWidget(self.table)
@@ -151,6 +164,29 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(2, 0, QtWidgets.QTableWidgetItem('Уход'))
         self.param_table.setItem(3, 0, QtWidgets.QTableWidgetItem('RnS'))
         self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
+
+        # Set background color for RnS, Rn^-0.5 columns in the data table
+        rn_s_column = 2
+        rn_sqrt_column = 5
+        rn_s_delegate = self.table.itemDelegateForColumn(rn_s_column)
+        rn_sqrt_delegate = self.table.itemDelegateForColumn(rn_sqrt_column)
+        rn_s_delegate.setBackground(QtGui.QBrush(QtGui.QColor(240, 240, 240, 128)))
+        rn_sqrt_delegate.setBackground(QtGui.QBrush(QtGui.QColor(240, 240, 240, 128)))
+
+        # Set background color for Value column in the result table
+        value_column = 1
+        value_delegate = self.result_table.itemDelegateForColumn(value_column)
+        value_delegate.setBackground(QtGui.QBrush(QtGui.QColor(240, 240, 240, 128)))
+
+        # Set background color for Number column in the data table
+        number_column = 0
+        number_delegate = self.table.itemDelegateForColumn(number_column)
+        number_delegate.setBackground(QtGui.QBrush(QtGui.QColor(192, 192, 192, 128)))
+
+        # Set background color for Parameter column in the result table
+        parameter_column = 0
+        parameter_delegate = self.param_table.itemDelegateForColumn(parameter_column)
+        parameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(192, 192, 192, 128)))
 
     def calculate_results(self):
         self.update_plot()
@@ -240,7 +276,6 @@ class Window(QtWidgets.QWidget):
             self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
             self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
             self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
-        self.param_table.clearContents()
         self.plot.clear()
 
     def clean_all(self):
@@ -250,7 +285,6 @@ class Window(QtWidgets.QWidget):
             self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(''))  # Clear Diameter column
             self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
             self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
-        self.param_table.clearContents()
         self.plot.clear()
 
     def cell_button_clicked(self, row, col):
@@ -291,7 +325,7 @@ class Window(QtWidgets.QWidget):
             selected_items = self.table.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    if item.column() not in [0, 2, 4, 5]:  # Disable delete for columns 0, 2, 4, and 5
+                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
                         self.table.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.update_plot()
         else:
