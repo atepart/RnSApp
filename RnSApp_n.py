@@ -19,6 +19,14 @@ class Table(QtWidgets.QTableWidget):
         self.setShowGrid(True)
         self.setGridStyle(QtCore.Qt.SolidLine)
 
+        # Set columns 0, 2, and 5 as read-only
+        self.set_read_only_columns([0, 2, 5])
+
+    def set_read_only_columns(self, columns):
+        for col in columns:
+            delegate = ReadOnlyDelegate(self)
+            self.setItemDelegateForColumn(col, delegate)
+
     def update_table(self, item):
         self.itemChanged.disconnect(self.update_table)
         row = item.row()
@@ -47,7 +55,8 @@ class Table(QtWidgets.QTableWidget):
             selected_items = self.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
+                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
+                        self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
                 self.parent().update_plot()
         elif event.matches(QtGui.QKeySequence.Paste):
             self.paste_data()
@@ -134,6 +143,11 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
 
     def calculate_results(self):
+        # Clear the data in columns 2 and 5
+        for row in range(self.table.rowCount()):
+            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))
+            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))
+
         self.update_plot()
 
     def update_plot(self):
