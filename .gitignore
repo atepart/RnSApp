@@ -3,3 +3,5 @@ cells.xlsx
 venv
 *.DS_Store
 *.xlsx
+*.idea
+*.code

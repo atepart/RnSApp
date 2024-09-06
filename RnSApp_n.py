@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from utils import linear, linear_fit
 
+
 class BackgroundDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self, color, parent=None):
         super(BackgroundDelegate, self).__init__(parent)
@@ -17,6 +18,7 @@ class BackgroundDelegate(QtWidgets.QStyledItemDelegate):
         painter.restore()
         super(BackgroundDelegate, self).paint(painter, option, index)
 
+
 class Table(QtWidgets.QTableWidget):
     def __init__(self, rows, columns):
         super(Table, self).__init__(rows, columns)
@@ -26,7 +28,7 @@ class Table(QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(0, ReadOnlyDelegate(self))
         self.itemChanged.connect(self.update_table)
         for i in range(rows):
-            self.setItem(i, 0, QtWidgets.QTableWidgetItem(str(i+1)))
+            self.setItem(i, 0, QtWidgets.QTableWidgetItem(str(i + 1)))
         self.setShowGrid(True)
         self.setGridStyle(QtCore.Qt.SolidLine)
 
@@ -109,9 +111,11 @@ class Table(QtWidgets.QTableWidget):
                 self.update_table(item)
         self.parent().update_plot()
 
+
 class ReadOnlyDelegate(QtWidgets.QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         return
+
 
 class Window(QtWidgets.QWidget):
     def __init__(self):
@@ -134,28 +138,25 @@ class Window(QtWidgets.QWidget):
         self.button_layout = QtWidgets.QHBoxLayout()
         self.result_button = QtWidgets.QPushButton('Result')
         self.result_button.setToolTip("Произвести рассчет")
-        self.result_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.result_button.clicked.connect(self.calculate_results)
         self.clean_rn_button = QtWidgets.QPushButton('Clear Rn')
         self.clean_rn_button.setToolTip("Очистить Rn")
-        self.clean_rn_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.clean_rn_button.clicked.connect(self.clean_rn)
         self.clean_all_button = QtWidgets.QPushButton('Clear All')
         self.clean_all_button.setToolTip("Очистить все данные")
         self.clean_all_button.clicked.connect(self.clean_all)
         self.save_button = QtWidgets.QPushButton('Save All data')
         self.save_button.setToolTip("Сохранить входные данные и рассчет")
-        self.clean_all_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.save_button = QtWidgets.QPushButton('Save')
         self.save_button.clicked.connect(self.save_data)
-        self.save_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.button_layout.addWidget(self.result_button)
         self.button_layout.addWidget(self.clean_rn_button)
         self.button_layout.addWidget(self.clean_all_button)
         self.button_layout.addWidget(self.save_button)
         self.right_layout.addLayout(self.button_layout)
         self.result_table = QtWidgets.QTableWidget(1, 6)
-        self.result_table.setHorizontalHeaderLabels(['Number', 'Name', 'RnS', 'Diameter (μm)', 'Resistance (Ω)', 'Rn^-0.5'])
+        self.result_table.setHorizontalHeaderLabels(
+            ['Number', 'Name', 'RnS', 'Diameter (μm)', 'Resistance (Ω)', 'Rn^-0.5'])
         self.result_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.result_table.verticalHeader().setVisible(False)
         self.result_table.setItemDelegateForColumn(0, ReadOnlyDelegate(self))  # Set the first column as read-only
@@ -163,14 +164,13 @@ class Window(QtWidgets.QWidget):
         self.cell_buttons = []
         for i in range(4):
             for j in range(4):
-                button = QtWidgets.QPushButton(f'Cell {i*4 + j + 1}')
+                button = QtWidgets.QPushButton(f'Cell {i * 4 + j + 1}')
                 button.clicked.connect(lambda checked=False, row=i, col=j: self.cell_button_clicked(row, col))
                 self.cell_layout.addWidget(button, i, j)
                 self.cell_buttons.append(button)
         self.cell_save_button = QtWidgets.QPushButton('Save cells RnS')
         self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
-        self.cell_save_button.setStyleSheet("background-color: rgba(72, 250, 215, 51); border-radius: 10px; border: none;")
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
         self.right_layout.addLayout(self.cell_layout)
         self.layout.addWidget(self.table)
@@ -183,29 +183,6 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(2, 0, QtWidgets.QTableWidgetItem('Уход'))
         self.param_table.setItem(3, 0, QtWidgets.QTableWidgetItem('RnS'))
         self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
-
-        # Set background color for RnS, Rn^-0.5 columns in the data table
-        rn_s_column = 2
-        rn_sqrt_column = 5
-        rn_s_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
-        rn_sqrt_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
-        self.table.setItemDelegateForColumn(rn_s_column, rn_s_delegate)
-        self.table.setItemDelegateForColumn(rn_sqrt_column, rn_sqrt_delegate)
-
-        # Set background color for Value column in the result table
-        value_column = 1
-        value_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
-        self.result_table.setItemDelegateForColumn(value_column, value_delegate)
-
-        # Set background color for Number column in the data table
-        number_column = 0
-        number_delegate = BackgroundDelegate(QtGui.QColor(192, 192, 192, 128))
-        self.table.setItemDelegateForColumn(number_column, number_delegate)
-
-        # Set background color for Parameter column in the result table
-        parameter_column = 0
-        parameter_delegate = BackgroundDelegate(QtGui.QColor(192, 192, 192, 128))
-        self.param_table.setItemDelegateForColumn(parameter_column, parameter_delegate)
 
     def calculate_results(self):
         self.update_plot()
@@ -272,7 +249,8 @@ class Window(QtWidgets.QWidget):
     def save_data(self):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
-        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Data", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Data", "",
+                                                             "Excel Files (*.xlsx);;All Files (*)", options=options)
         if not file_name:
             return
         wb = openpyxl.Workbook()
@@ -281,13 +259,15 @@ class Window(QtWidgets.QWidget):
         headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
         ws1.append(headers)
         for row in range(self.table.rowCount()):
-            data = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in range(self.table.columnCount())]
+            data = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in
+                    range(self.table.columnCount())]
             ws1.append(data)
         ws2 = wb.create_sheet("Results")
         headers = [self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())]
         ws2.append(headers)
         for row in range(self.param_table.rowCount()):
-            data = [self.param_table.item(row, col).text() if self.param_table.item(row, col) else '' for col in range(self.param_table.columnCount())]
+            data = [self.param_table.item(row, col).text() if self.param_table.item(row, col) else '' for col in
+                    range(self.param_table.columnCount())]
             ws2.append(data)
 
         if not file_name.endswith('.xlsx'):
@@ -321,7 +301,8 @@ class Window(QtWidgets.QWidget):
     def save_cell_data(self):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
-        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Cell Data", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Cell Data", "",
+                                                             "Excel Files (*.xlsx);;All Files (*)", options=options)
         if not file_name:
             return
 
@@ -340,7 +321,7 @@ class Window(QtWidgets.QWidget):
         output = []
 
         # Разделение исходного массива на блоки по 4 строки
-        blocks = [init_data[i:i+4] for i in range(0, len(init_data), 4)]
+        blocks = [init_data[i:i + 4] for i in range(0, len(init_data), 4)]
 
         # Обработка каждого блока
         for block in blocks:
@@ -383,7 +364,9 @@ class Window(QtWidgets.QWidget):
                 if item is not None:
                     self.result_table.setItem(row, col, QtWidgets.QTableWidgetItem(item.text()))
 
-app = QtWidgets.QApplication(sys.argv)
-window = Window()
-window.show()
-sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    app = QtWidgets.QApplication(sys.argv)
+    window = Window()
+    window.show()
+    sys.exit(app.exec_())
