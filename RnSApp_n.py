@@ -6,6 +6,17 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from utils import linear, linear_fit
 
+class BackgroundDelegate(QtWidgets.QStyledItemDelegate):
+    def __init__(self, color, parent=None):
+        super(BackgroundDelegate, self).__init__(parent)
+        self.color = color
+
+    def paint(self, painter, option, index):
+        painter.save()
+        painter.fillRect(option.rect, self.color)
+        painter.restore()
+        super(BackgroundDelegate, self).paint(painter, option, index)
+
 class Table(QtWidgets.QTableWidget):
     def __init__(self, rows, columns):
         super(Table, self).__init__(rows, columns)
@@ -27,8 +38,10 @@ class Table(QtWidgets.QTableWidget):
         resistance_column = 4
         diameter_delegate = self.itemDelegateForColumn(diameter_column)
         resistance_delegate = self.itemDelegateForColumn(resistance_column)
-        diameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
-        resistance_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
+        if diameter_delegate is not None:
+            diameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
+        if resistance_delegate is not None:
+            resistance_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
 
     def set_read_only_columns(self, columns):
         for col in columns:
@@ -168,25 +181,25 @@ class Window(QtWidgets.QWidget):
         # Set background color for RnS, Rn^-0.5 columns in the data table
         rn_s_column = 2
         rn_sqrt_column = 5
-        rn_s_delegate = self.table.itemDelegateForColumn(rn_s_column)
-        rn_sqrt_delegate = self.table.itemDelegateForColumn(rn_sqrt_column)
-        rn_s_delegate.setBackground(QtGui.QBrush(QtGui.QColor(240, 240, 240, 128)))
-        rn_sqrt_delegate.setBackground(QtGui.QBrush(QtGui.QColor(240, 240, 240, 128)))
+        rn_s_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
+        rn_sqrt_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
+        self.table.setItemDelegateForColumn(rn_s_column, rn_s_delegate)
+        self.table.setItemDelegateForColumn(rn_sqrt_column, rn_sqrt_delegate)
 
         # Set background color for Value column in the result table
         value_column = 1
-        value_delegate = self.result_table.itemDelegateForColumn(value_column)
-        value_delegate.setBackground(QtGui.QBrush(QtGui.QColor(240, 240, 240, 128)))
+        value_delegate = BackgroundDelegate(QtGui.QColor(240, 240, 240, 128))
+        self.result_table.setItemDelegateForColumn(value_column, value_delegate)
 
         # Set background color for Number column in the data table
         number_column = 0
-        number_delegate = self.table.itemDelegateForColumn(number_column)
-        number_delegate.setBackground(QtGui.QBrush(QtGui.QColor(192, 192, 192, 128)))
+        number_delegate = BackgroundDelegate(QtGui.QColor(192, 192, 192, 128))
+        self.table.setItemDelegateForColumn(number_column, number_delegate)
 
         # Set background color for Parameter column in the result table
         parameter_column = 0
-        parameter_delegate = self.param_table.itemDelegateForColumn(parameter_column)
-        parameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(192, 192, 192, 128)))
+        parameter_delegate = BackgroundDelegate(QtGui.QColor(192, 192, 192, 128))
+        self.param_table.setItemDelegateForColumn(parameter_column, parameter_delegate)
 
     def calculate_results(self):
         self.update_plot()
