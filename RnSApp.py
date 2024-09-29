@@ -1,119 +1,234 @@
 import sys
 import numpy as np
-import math
 import openpyxl
 from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 from openpyxl.styles import Side, Border, Font
 
-from utils import linear, linear_fit
+from utils import (
+    linear,
+    linear_fit,
+    calculate_rns,
+    calculate_rns_per_sample,
+    calculate_drift,
+)
 
 
-class BackgroundDelegate(QtWidgets.QStyledItemDelegate):
-    def __init__(self, color, parent=None):
-        super(BackgroundDelegate, self).__init__(parent)
-        self.color = color
+class DataTableColumns:
+    NUMBER = "№"  # int
+    NAME = "Имя"  # str
+    DRIFT = "Уход"  # float
+    RNS = "RnS"  # float
+    DIAMETER = "Диаметр ACAD (μm)"  # float
+    RESISTANCE = "Сопротивление (Ω)"  # float
+    RN = "Rn^-0.5"  # float
 
-    def paint(self, painter, option, index):
-        painter.save()
-        painter.fillRect(option.rect, self.color)
-        painter.restore()
-        super(BackgroundDelegate, self).paint(painter, option, index)
+    fields = [
+        NUMBER,
+        NAME,
+        DRIFT,
+        RNS,
+        DIAMETER,
+        RESISTANCE,
+        RN,
+    ]
+
+    text_by_index = {ind: field for ind, field in enumerate(fields)}
+    index_by_text = {field: ind for ind, field in enumerate(fields)}
 
 
-class Table(QtWidgets.QTableWidget):
-    def __init__(self, rows, columns):
-        super(Table, self).__init__(rows, columns)
-        self.setHorizontalHeaderLabels(['Number', 'Name', 'RnS', 'Diameter (μm)', 'Resistance (Ω)', 'Rn^-0.5'])
-        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+class ParamTableColumns:
+    SLOPE = "Наклон"
+    INTERCEPT = "Пересечение"
+    DRIFT = "Уход"
+    RNS = "RnS"
+    DRIFT_ERROR = "Ошибка ухода"
+    RNS_ERROR = "Ошибка RnS"
+
+    fields = [
+        SLOPE,
+        INTERCEPT,
+        DRIFT,
+        RNS,
+        DRIFT_ERROR,
+        RNS_ERROR,
+    ]
+
+    text_by_index = {ind: field for ind, field in enumerate(fields)}
+    index_by_text = {field: ind for ind, field in enumerate(fields)}
+
+
+class DataTable(QtWidgets.QTableWidget):
+    def __init__(self, rows):
+        super(DataTable, self).__init__(rows, len(DataTableColumns.fields))
+
+        # Set Table headers
+        self.setHorizontalHeaderLabels(DataTableColumns.fields)
+        self.horizontalHeader().setSectionResizeMode(
+            QtWidgets.QHeaderView.ResizeMode.Stretch
+        )
+
+        # Remove vertical Table headers
         self.verticalHeader().setVisible(False)
-        self.setItemDelegateForColumn(0, ReadOnlyDelegate(self))
-        self.itemChanged.connect(self.update_table)
-        for i in range(rows):
-            self.setItem(i, 0, QtWidgets.QTableWidgetItem(str(i + 1)))
+
+        # Set Table grid
         self.setShowGrid(True)
-        self.setGridStyle(QtCore.Qt.SolidLine)
+        self.setGridStyle(QtCore.Qt.PenStyle.SolidLine)
 
-        # Set columns 0, 2, 4, and 5 as read-only
-        self.set_read_only_columns([0, 2, 5])
+        # Set default Numbers
+        self.set_default_numbers()
 
-        # Set background color for Diameter and Resistance columns
-        diameter_column = 3
-        resistance_column = 4
-        diameter_delegate = self.itemDelegateForColumn(diameter_column)
-        resistance_delegate = self.itemDelegateForColumn(resistance_column)
-        if diameter_delegate is not None:
-            diameter_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
-        if resistance_delegate is not None:
-            resistance_delegate.setBackground(QtGui.QBrush(QtGui.QColor(134, 255, 170, 128)))
+        # Set columns RnS, Rn as read-only
+        self.set_read_only_columns(
+            [
+                DataTableColumns.index_by_text[DataTableColumns.RNS],
+                DataTableColumns.index_by_text[DataTableColumns.RN],
+            ]
+        )
+
+        # Connect event update_table
+        self.itemChanged.connect(self.update_table)
+
+    def set_default_numbers(self):
+        for i in range(self.rowCount()):
+            self.setItem(
+                i,
+                DataTableColumns.index_by_text[DataTableColumns.NUMBER],
+                QtWidgets.QTableWidgetItem(str(i + 1)),
+            )
 
     def set_read_only_columns(self, columns):
         for col in columns:
-            if col != 4:  # Make the Resistance column editable
-                delegate = ReadOnlyDelegate(self)
-                self.setItemDelegateForColumn(col, delegate)
+            self.setItemDelegateForColumn(col, ReadOnlyDelegate(self))
 
     def update_table(self, item):
         self.itemChanged.disconnect(self.update_table)
         row = item.row()
         col = item.column()
+
+        # Для рассчета нужны только колонки Diameter, Resistance
+        if col not in (
+            DataTableColumns.index_by_text[DataTableColumns.DIAMETER],
+            DataTableColumns.index_by_text[DataTableColumns.RESISTANCE],
+        ):
+            self.itemChanged.connect(self.update_table)
+            return
+
+        # Достаем Resistance
+        if (
+            self.item(row, DataTableColumns.index_by_text[DataTableColumns.RESISTANCE])
+            is None
+        ):
+            self.itemChanged.connect(self.update_table)
+            return
+
+        # Убеждаемся, что Resistance is float
         try:
-            if col == 3:  # Diameter
-                if self.item(row, 4) is not None:
-                    resistance = float(self.item(row, 4).text())
-                    if resistance != 0:  # Check if resistance is not equal to 0
-                        rn_sqrt = 1 / np.sqrt(resistance)
-                        self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
-                    else:
-                        self.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
-                        self.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
-            elif col == 4:  # Resistance
-                resistance = float(item.text())
-                if resistance != 0:  # Check if resistance is not equal to 0
-                    rn_sqrt = 1 / np.sqrt(resistance)
-                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
-                else:
-                    self.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
-                    self.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
+            resistance = float(
+                self.item(
+                    row, DataTableColumns.index_by_text[DataTableColumns.RESISTANCE]
+                ).text()
+            )
         except ValueError:
-            pass
+            self.itemChanged.connect(self.update_table)
+            return
+
+        if resistance != 0:  # Если Resistance != 0, то рассчитываем Rn
+            rn_sqrt = 1 / np.sqrt(resistance)
+            self.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RN],
+                QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))),
+            )
+        else:  # Иначе очищаем RnS, Rn
+            self.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RNS],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear RnS column
+            self.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RN],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Rn^-0.5 column
         self.itemChanged.connect(self.update_table)
 
     def keyPressEvent(self, event):
-        if event.key() == QtCore.Qt.Key_Enter or event.key() == QtCore.Qt.Key_Return:
+        # На нажатие Enter/Return переход на следующую строку
+        if event.key() in (QtCore.Qt.Key.Key_Enter, QtCore.Qt.Key.Key_Return):
             row = self.currentRow()
             col = self.currentColumn()
             if row < self.rowCount() - 1:
                 self.setCurrentCell(row + 1, col)
-        elif event.key() == QtCore.Qt.Key_Delete:
+
+        # На нажатие Delete/Backspace удаление выбранных значений
+        elif event.key() in (QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace):
             selected_items = self.selectedItems()
             if selected_items:
                 for item in selected_items:
-                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
-                        self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
+                    if item.column() not in [
+                        DataTableColumns.index_by_text[DataTableColumns.RNS],
+                        DataTableColumns.index_by_text[DataTableColumns.RN],
+                    ]:  # Disable delete for columns Rn and RnS
+                        self.setItem(
+                            item.row(), item.column(), QtWidgets.QTableWidgetItem("")
+                        )
                 self.parent().update_plot()
+
+        # Ивент вставки ctrl-v
         elif event.matches(QtGui.QKeySequence.Paste):
             self.paste_data()
         else:
-            super(Table, self).keyPressEvent(event)
+            super(DataTable, self).keyPressEvent(event)
 
     def paste_data(self):
         clipboard = QtWidgets.QApplication.clipboard()
         data = clipboard.text()
-        rows = data.split('\n')
+        rows = data.split("\n")
         start_row = self.currentRow()
         start_col = self.currentColumn()
-        if start_col not in [3, 4]:  # Можно вставлять только в 3 и 4
+        if start_col not in [
+            DataTableColumns.index_by_text[DataTableColumns.DIAMETER],
+            DataTableColumns.index_by_text[DataTableColumns.RESISTANCE],
+            DataTableColumns.index_by_text[DataTableColumns.NUMBER],
+            DataTableColumns.index_by_text[DataTableColumns.NAME],
+        ]:  # Можно вставлять только в Number, Name, Diameter, Resistance
+
             return
         for i, row in enumerate(rows):
-            values = row.split('\t')
+            values = row.split("\t")
             for j, value in enumerate(values):
-                if start_col in [2, 3, 4, 5]:  # Для данных колонок нужны числа float
-                    value = value.replace(',', '.')
+                if start_col in [
+                    DataTableColumns.index_by_text[DataTableColumns.DIAMETER],
+                    DataTableColumns.index_by_text[DataTableColumns.RESISTANCE],
+                ]:  # Для данных колонок нужны числа float
+                    value = value.replace(",", ".")
                 item = QtWidgets.QTableWidgetItem(value)
                 self.setItem(start_row + i, start_col + j, item)
                 self.update_table(item)
-        self.parent().update_plot()
+
+    def get_column_values(self, column: str):
+        column_ind = DataTableColumns.index_by_text[column]
+        values = []
+        for row in range(self.rowCount()):
+            value = self.item(row, column_ind)
+            if not value and not value.text():
+                continue
+            values.append(value.text())
+
+
+class ParamTable(QtWidgets.QTableWidget):
+    def __init__(self):
+        super(ParamTable, self).__init__(1, len(ParamTableColumns.fields))
+
+        self.setHorizontalHeaderLabels(ParamTableColumns.fields)
+        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+
+        self.verticalHeader().setVisible(False)
+
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+        )
 
 
 class ReadOnlyDelegate(QtWidgets.QStyledItemDelegate):
@@ -125,7 +240,7 @@ class Window(QtWidgets.QWidget):
     def __init__(self):
         super(Window, self).__init__()
         # Таблица с исходными данными
-        self.table = Table(50, 6)
+        self.table = DataTable(rows=50)
 
         # График
         self.plot = pg.PlotWidget()
@@ -138,32 +253,27 @@ class Window(QtWidgets.QWidget):
         self.right_layout = QtWidgets.QVBoxLayout()
 
         # Таблица с параметрами
-        self.param_table = QtWidgets.QTableWidget(5, 2)
-        self.param_table.setHorizontalHeaderLabels(['Parameter', 'Value'])
-        self.param_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        self.param_table.verticalHeader().setVisible(False)
-        self.param_table.setItemDelegateForColumn(0, ReadOnlyDelegate(self))
-        self.param_table.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.param_table = ParamTable()
 
         # Экшнс кнопки
-        self.actions_group = QtWidgets.QGroupBox("Actions")
+        self.actions_group = QtWidgets.QGroupBox("Действия")
         self.actions_layout = QtWidgets.QHBoxLayout()
 
-        self.result_button = QtWidgets.QPushButton('Result')
+        self.result_button = QtWidgets.QPushButton("Result")
         self.result_button.setToolTip("Произвести рассчет")
         self.result_button.clicked.connect(self.calculate_results)
 
-        self.clean_rn_button = QtWidgets.QPushButton('Clear Rn')
+        self.clean_rn_button = QtWidgets.QPushButton("Clear Rn")
         self.clean_rn_button.setToolTip("Очистить Rn")
         self.clean_rn_button.clicked.connect(self.clean_rn)
 
-        self.clean_all_button = QtWidgets.QPushButton('Clear All')
+        self.clean_all_button = QtWidgets.QPushButton("Clear All")
         self.clean_all_button.setToolTip("Очистить все данные")
         self.clean_all_button.clicked.connect(self.clean_all)
 
-        self.save_button = QtWidgets.QPushButton('Save All data')
+        self.save_button = QtWidgets.QPushButton("Save All data")
         self.save_button.setToolTip("Сохранить входные данные и рассчет")
-        self.save_button = QtWidgets.QPushButton('Save')
+        self.save_button = QtWidgets.QPushButton("Save")
         self.save_button.clicked.connect(self.save_data)
 
         self.actions_layout.addWidget(self.result_button)
@@ -178,11 +288,15 @@ class Window(QtWidgets.QWidget):
         self.cell_buttons = []
         for i in range(4):
             for j in range(4):
-                button = QtWidgets.QPushButton(f'Cell {i * 4 + j + 1}')
-                button.clicked.connect(lambda checked=False, row=i, col=j: self.cell_button_clicked(row, col))
+                button = QtWidgets.QPushButton(f"Ячейка {i * 4 + j + 1}")
+                button.clicked.connect(
+                    lambda checked=False, row=i, col=j: self.cell_button_clicked(
+                        row, col
+                    )
+                )
                 self.cell_layout.addWidget(button, i, j)
                 self.cell_buttons.append(button)
-        self.cell_save_button = QtWidgets.QPushButton('Save cells RnS')
+        self.cell_save_button = QtWidgets.QPushButton("Save cells RnS")
         self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
@@ -199,69 +313,201 @@ class Window(QtWidgets.QWidget):
         self.layout.addLayout(self.right_layout)
         self.setLayout(self.layout)
 
-        # Set the values for the first column of the parameter table
-        self.param_table.setItem(0, 0, QtWidgets.QTableWidgetItem('Slope'))
-        self.param_table.setItem(1, 0, QtWidgets.QTableWidgetItem('Intercept'))
-        self.param_table.setItem(2, 0, QtWidgets.QTableWidgetItem('Уход'))
-        self.param_table.setItem(3, 0, QtWidgets.QTableWidgetItem('RnS'))
-        self.param_table.setItem(4, 0, QtWidgets.QTableWidgetItem('Ошибка'))
-
     def calculate_results(self):
         # Update the RnS column in the table
+        self.update_plot()
         for row in range(self.table.rowCount()):
-            item_diameter = self.table.item(row, 3)
-            item_rn = self.table.item(row, 4)
-            if item_diameter is not None and item_diameter.text() and item_rn is not None and item_rn.text():
+            item_diameter = self.table.item(
+                row, DataTableColumns.index_by_text[DataTableColumns.DIAMETER]
+            )
+            item_rn = self.table.item(
+                row, DataTableColumns.index_by_text[DataTableColumns.RESISTANCE]
+            )
+            if (
+                item_diameter is not None
+                and item_diameter.text()
+                and item_rn is not None
+                and item_rn.text()
+            ):
                 try:
                     diameter = float(item_diameter.text())
                     rn = float(item_rn.text())
-                    zero_x = float(self.param_table.item(2, 1).text())  # Get the Уход value from the parameter table
-                    rns_value = rn * 0.25 * math.pi * (diameter - zero_x) ** 2
-                    self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(str(round(rns_value, 4))))
+                    zero_x = float(
+                        self.param_table.item(
+                            0, ParamTableColumns.index_by_text[ParamTableColumns.DRIFT]
+                        ).text()
+                    )  # Get the Уход value from the parameter table
+                    rns_value = calculate_rns_per_sample(
+                        resistance=rn, diameter=diameter, zero_x=zero_x
+                    )
+                    self.table.setItem(
+                        row,
+                        DataTableColumns.index_by_text[DataTableColumns.RNS],
+                        QtWidgets.QTableWidgetItem(str(round(rns_value, 4))),
+                    )
+                    drift_value = calculate_drift(
+                        diameter=diameter, resistance=rn, rns=rns_value
+                    )
+                    self.table.setItem(
+                        row,
+                        DataTableColumns.index_by_text[DataTableColumns.DRIFT],
+                        QtWidgets.QTableWidgetItem(str(round(drift_value, 4))),
+                    )
                 except ValueError:
-                    self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(""))
-                    self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(""))
+                    self.table.setItem(
+                        row,
+                        DataTableColumns.index_by_text[DataTableColumns.RNS],
+                        QtWidgets.QTableWidgetItem(""),
+                    )
+                    self.table.setItem(
+                        row,
+                        DataTableColumns.index_by_text[DataTableColumns.DRIFT],
+                        QtWidgets.QTableWidgetItem(""),
+                    )
+                    self.table.setItem(
+                        row,
+                        DataTableColumns.index_by_text[DataTableColumns.RN],
+                        QtWidgets.QTableWidgetItem(""),
+                    )
             else:
-                self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(""))
-                self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(""))
-        # Update the result table
-        self.update_result_table()
+                self.table.setItem(
+                    row,
+                    DataTableColumns.index_by_text[DataTableColumns.RNS],
+                    QtWidgets.QTableWidgetItem(""),
+                )
+                self.table.setItem(
+                    row,
+                    DataTableColumns.index_by_text[DataTableColumns.DRIFT],
+                    QtWidgets.QTableWidgetItem(""),
+                )
+                self.table.setItem(
+                    row,
+                    DataTableColumns.index_by_text[DataTableColumns.RN],
+                    QtWidgets.QTableWidgetItem(""),
+                )
+
         self.update_plot()
 
     def update_plot(self):
-        x = []
-        y = []
+        diameter_list = []
+        rn_list = []
+        rns_list = []
+        drift_list = []
         for i in range(self.table.rowCount()):
-            item_x = self.table.item(i, 3)
-            item_y = self.table.item(i, 5)
-            if item_x is not None and item_y is not None and item_x.text() and item_y.text():
+            item_diameter = self.table.item(
+                i, DataTableColumns.index_by_text[DataTableColumns.DIAMETER]
+            )
+            item_rn = self.table.item(
+                i, DataTableColumns.index_by_text[DataTableColumns.RN]
+            )
+            item_rns = self.table.item(
+                i, DataTableColumns.index_by_text[DataTableColumns.RNS]
+            )
+            item_drift = self.table.item(
+                i, DataTableColumns.index_by_text[DataTableColumns.DRIFT]
+            )
+            if (
+                item_diameter is not None
+                and item_rn is not None
+                and item_diameter.text()
+                and item_rn.text()
+            ):
                 try:
-                    x.append(float(item_x.text()))
-                    y.append(float(item_y.text()))
+                    diameter_list.append(float(item_diameter.text()))
+                    rn_list.append(float(item_rn.text()))
                 except ValueError:
                     pass
         self.plot.clear()
-        self.plot.plot(x, y, name="Data", symbolSize=6, symbolBrush="#088F8F")
-        if len(x) > 1 and len(y) > 1:
-            b, a = linear_fit(x, y)
-            zero_x = -a / b
-            if np.min(x) > zero_x:
-                x.insert(0, zero_x)
-            if np.max(x) < zero_x:
-                x.append(zero_x)
-            y_appr = np.vectorize(lambda x: linear(x, b, a))(x)
-            pen2 = pg.mkPen(color="#FF0000", width=3)
-            self.plot.plot(x, y_appr, name="Fit", pen=pen2, symbolSize=0, symbolBrush=pen2.color())
-            self.param_table.setItem(0, 1, QtWidgets.QTableWidgetItem(str(round(b, 4))))
-            self.param_table.setItem(1, 1, QtWidgets.QTableWidgetItem(str(round(a, 4))))
-            self.param_table.setItem(2, 1, QtWidgets.QTableWidgetItem(str(round(zero_x, 4))))
-            rns = math.pi * 0.25 / (b ** 2)
-            self.param_table.setItem(3, 1, QtWidgets.QTableWidgetItem(str(round(rns, 4))))
+        self.plot.plot(
+            diameter_list, rn_list, name="Data", symbolSize=6, symbolBrush="#088F8F"
+        )
+        if len(diameter_list) > 1 and len(rn_list) > 1:
+            slope, intercept = linear_fit(diameter_list, rn_list)
 
-            # Calculate the mean deviation from the mean of the approximation
-            y_mean = np.mean(y)
-            deviation = np.mean(np.abs(y - y_mean))
-            self.param_table.setItem(4, 1, QtWidgets.QTableWidgetItem(str(round(deviation, 4))))
+            self.param_table.setItem(
+                0,
+                ParamTableColumns.index_by_text[ParamTableColumns.SLOPE],
+                QtWidgets.QTableWidgetItem(str(round(slope, 4))),
+            )
+            self.param_table.setItem(
+                0,
+                ParamTableColumns.index_by_text[ParamTableColumns.INTERCEPT],
+                QtWidgets.QTableWidgetItem(str(round(intercept, 4))),
+            )
+
+            drift = -intercept / slope
+
+            self.param_table.setItem(
+                0,
+                ParamTableColumns.index_by_text[ParamTableColumns.DRIFT],
+                QtWidgets.QTableWidgetItem(str(round(drift, 4))),
+            )
+
+            rns = calculate_rns(slope)
+            self.param_table.setItem(
+                0,
+                ParamTableColumns.index_by_text[ParamTableColumns.RNS],
+                QtWidgets.QTableWidgetItem(str(round(rns, 4))),
+            )
+
+            rns_list = np.array(
+                [
+                    float(
+                        self.table.item(
+                            row, DataTableColumns.index_by_text[DataTableColumns.RNS]
+                        ).text()
+                    )
+                    for row in range(self.table.rowCount())
+                    if self.table.item(
+                        row, DataTableColumns.index_by_text[DataTableColumns.RNS]
+                    )
+                    is not None
+                ]
+            )
+            rns_error = np.sqrt(np.sum((rns_list - rns) ** 2))
+
+            self.param_table.setItem(
+                0,
+                ParamTableColumns.index_by_text[ParamTableColumns.RNS_ERROR],
+                QtWidgets.QTableWidgetItem(str(round(rns_error, 4))),
+            )
+
+            drift_list = np.array(
+                [
+                    float(
+                        self.table.item(
+                            row, DataTableColumns.index_by_text[DataTableColumns.DRIFT]
+                        ).text()
+                    )
+                    for row in range(self.table.rowCount())
+                    if self.table.item(
+                        row, DataTableColumns.index_by_text[DataTableColumns.DRIFT]
+                    )
+                    is not None
+                ]
+            )
+            drift_error = np.sqrt(np.sum((drift_list - drift) ** 2))
+            self.param_table.setItem(
+                0,
+                ParamTableColumns.index_by_text[ParamTableColumns.DRIFT_ERROR],
+                QtWidgets.QTableWidgetItem(str(round(drift_error, 4))),
+            )
+
+            # Plot fit
+            if np.min(diameter_list) > drift:
+                diameter_list.insert(0, drift)
+            if np.max(diameter_list) < drift:
+                diameter_list.append(drift)
+            y_appr = np.vectorize(lambda x: linear(x, slope, intercept))(diameter_list)
+            pen2 = pg.mkPen(color="#FF0000", width=3)
+            self.plot.plot(
+                diameter_list,
+                y_appr,
+                name="Fit",
+                pen=pen2,
+                symbolSize=0,
+                symbolBrush=pen2.color(),
+            )
 
     def prepare_plot(self):
         y_label = "Rn^-0.5"
@@ -278,60 +524,139 @@ class Window(QtWidgets.QWidget):
     def save_data(self):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
-        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Data", "",
-                                                             "Excel Files (*.xlsx);;All Files (*)", options=options)
+        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Data",
+            "",
+            "Excel Files (*.xlsx);;All Files (*)",
+            options=options,
+        )
         if not file_name:
             return
         wb = openpyxl.Workbook()
         ws1 = wb.active
         ws1.title = "Data"
-        headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
+        headers = [
+            self.table.horizontalHeaderItem(i).text()
+            for i in range(self.table.columnCount())
+        ]
         ws1.append(headers)
         for row in range(self.table.rowCount()):
-            data = [self.table.item(row, col).text() if self.table.item(row, col) else '' for col in
-                    range(self.table.columnCount())]
+            data = [
+                self.table.item(row, col).text() if self.table.item(row, col) else ""
+                for col in range(self.table.columnCount())
+            ]
             ws1.append(data)
         ws2 = wb.create_sheet("Results")
-        headers = [self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())]
+        headers = [
+            self.param_table.horizontalHeaderItem(i).text()
+            for i in range(self.param_table.columnCount())
+        ]
         ws2.append(headers)
         for row in range(self.param_table.rowCount()):
-            data = [self.param_table.item(row, col).text() if self.param_table.item(row, col) else '' for col in
-                    range(self.param_table.columnCount())]
+            data = [
+                self.param_table.item(row, col).text()
+                if self.param_table.item(row, col)
+                else ""
+                for col in range(self.param_table.columnCount())
+            ]
             ws2.append(data)
 
-        if not file_name.endswith('.xlsx'):
-            file_name += '.xlsx'
+        if not file_name.endswith(".xlsx"):
+            file_name += ".xlsx"
         wb.save(filename=file_name)
 
     def clean_rn(self):
         for row in range(self.table.rowCount()):
-            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
-            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
-            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RNS],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear RnS column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RESISTANCE],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Resistance column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RN],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Rn^-0.5 column
         self.plot.clear()
 
     def clean_all(self):
         for row in range(self.table.rowCount()):
-            self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(''))  # Clear Name column
-            self.table.setItem(row, 2, QtWidgets.QTableWidgetItem(''))  # Clear RnS column
-            self.table.setItem(row, 3, QtWidgets.QTableWidgetItem(''))  # Clear Diameter column
-            self.table.setItem(row, 4, QtWidgets.QTableWidgetItem(''))  # Clear Resistance column
-            self.table.setItem(row, 5, QtWidgets.QTableWidgetItem(''))  # Clear Rn^-0.5 column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.NAME],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Name column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RNS],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear RnS column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.DIAMETER],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Diameter column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RESISTANCE],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Resistance column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.RN],
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Rn^-0.5 column
+            self.table.setItem(
+                row,
+                DataTableColumns.index_by_text[DataTableColumns.NUMBER],
+                QtWidgets.QTableWidgetItem(str(row + 1)),
+            )
         self.plot.clear()
 
     def cell_button_clicked(self, row, col):
-        series, ok = QtWidgets.QInputDialog.getText(self, 'Input Dialog', 'Enter series:')
+        series, ok = QtWidgets.QInputDialog.getText(
+            self, "Input Dialog", "Enter series:"
+        )
         if ok:
-            uhod = self.param_table.item(2, 1).text() if self.param_table.item(2, 1) is not None else ''
-            rns = self.param_table.item(3, 1).text() if self.param_table.item(3, 1) is not None else ''
+            drift = (
+                self.param_table.item(
+                    0, ParamTableColumns.index_by_text[ParamTableColumns.DRIFT]
+                ).text()
+                if self.param_table.item(
+                    0, ParamTableColumns.index_by_text[ParamTableColumns.DRIFT]
+                )
+                is not None
+                else ""
+            )
+            rns = (
+                self.param_table.item(
+                    0, ParamTableColumns.index_by_text[ParamTableColumns.RNS]
+                ).text()
+                if self.param_table.item(
+                    0, ParamTableColumns.index_by_text[ParamTableColumns.RNS]
+                )
+                is not None
+                else ""
+            )
             button = self.cell_buttons[row * 4 + col]
-            button.setText(f'Серия: {series}\nУход: {uhod}\nRnS: {rns}')
+            button.setText(f"Серия: {series}\nУход: {drift}\nRnS: {rns}")
 
     def save_cell_data(self):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
-        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save Cell Data", "",
-                                                             "Excel Files (*.xlsx);;All Files (*)", options=options)
+        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Cell Data",
+            "",
+            "Excel Files (*.xlsx);;All Files (*)",
+            options=options,
+        )
         if not file_name:
             return
 
@@ -350,7 +675,7 @@ class Window(QtWidgets.QWidget):
         output = []
 
         # Разделение исходного массива на блоки по 4 строки
-        blocks = [init_data[i:i + 4] for i in range(0, len(init_data), 4)]
+        blocks = [init_data[i : i + 4] for i in range(0, len(init_data), 4)]
 
         # Обработка каждого блока
         for block in blocks:
@@ -362,31 +687,20 @@ class Window(QtWidgets.QWidget):
             for col_ind, coll in enumerate(row, 1):
                 ws.cell(row=row_ind, column=col_ind, value=coll)
                 if (row_ind - 1) % 3 == 0:  # для клеток с названием серии
-                    ws.cell(row=row_ind, column=col_ind).border = Border(right=Side(style='thick'), top=Side('thick'),
-                                                                         bottom=Side(style='thick'))
+                    ws.cell(row=row_ind, column=col_ind).border = Border(
+                        right=Side(style="thick"),
+                        top=Side("thick"),
+                        bottom=Side(style="thick"),
+                    )
                     ws.cell(row=row_ind, column=col_ind).font = Font(bold=True)
                 else:  # для остальных клеток
-                    ws.cell(row=row_ind, column=col_ind).border = Border(right=Side(style='thick'))
+                    ws.cell(row=row_ind, column=col_ind).border = Border(
+                        right=Side(style="thick")
+                    )
         # Save the Excel file
-        if not file_name.endswith('.xlsx'):
-            file_name += '.xlsx'
+        if not file_name.endswith(".xlsx"):
+            file_name += ".xlsx"
         wb.save(filename=file_name)
-
-    def keyPressEvent(self, event):
-        if event.key() == QtCore.Qt.Key_Enter or event.key() == QtCore.Qt.Key_Return:
-            row = self.table.currentRow()
-            col = self.table.currentColumn()
-            if row < self.table.rowCount() - 1:
-                self.table.setCurrentCell(row + 1, col)
-        elif event.key() == QtCore.Qt.Key_Delete:
-            selected_items = self.table.selectedItems()
-            if selected_items:
-                for item in selected_items:
-                    if item.column() not in [0, 2, 5]:  # Disable delete for columns 0, 2, and 5
-                        self.table.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(''))
-                self.update_plot()
-        else:
-            super(Window, self).keyPressEvent(event)
 
 
 if __name__ == "__main__":

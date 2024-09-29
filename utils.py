@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def linear_fit(x, y):
     def mean(xs):
         return sum(xs) / len(xs)
@@ -26,10 +27,26 @@ def linear_fit(x, y):
 
     r = pearson_r(x, y)
 
-    b = r * (std(y, m_y) / std(x, m_x))
-    a = m_y - b * m_x
+    slope = r * (std(y, m_y) / std(x, m_x))
+    intercept = m_y - slope * m_x
 
-    return b, a
+    return slope, intercept
+
 
 def linear(x, b, a):
     return x * b + a
+
+
+def calculate_drift(diameter: float, resistance: float, rns: float):
+    """Рассчет ухода для образца"""
+    return diameter - np.sqrt((4 * rns / resistance) / np.pi)
+
+
+def calculate_rns(slope: float):
+    """Рассчет RnS для набора образцов"""
+    return np.pi * 0.25 / (slope**2)
+
+
+def calculate_rns_per_sample(resistance: float, diameter: float, zero_x: float):
+    """Рассчет RnS для одного образца"""
+    return resistance * 0.25 * np.pi * (diameter - zero_x) ** 2
