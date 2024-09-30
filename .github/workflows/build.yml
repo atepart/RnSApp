@@ -32,22 +32,20 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run build script
-      run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          .\build.bat
-        else
-          ./build.sh
-        fi
-      shell: bash
+      if: runner.os == 'Windows'
+      run: .\build.bat
+
+    - name: Run build script
+      if: runner.os == 'macOS'
+      run: ./build.sh
 
     - name: Archive Release Asset
-      run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_Windows.zip
-        else
-          zip -r ./dist/RnSApp_MacOS.zip ./dist/RnSApp
-        fi
-      shell: bash
+      if: runner.os == 'Windows'
+      run: Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_Windows.zip
+
+    - name: Archive Release Asset
+      if: runner.os == 'macOS'
+      run: zip -r ./dist/RnSApp_MacOS.zip ./dist/RnSApp
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
