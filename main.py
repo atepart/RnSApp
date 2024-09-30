@@ -1,3 +1,4 @@
+import re
 import sys
 import numpy as np
 import openpyxl
@@ -6,7 +7,8 @@ import pyqtgraph as pg
 from PyQt5.QtGui import QIcon
 from openpyxl.styles import Side, Border, Font
 
-from constants import DataTableColumns, ParamTableColumns
+from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS
+from store import Store
 from utils import (
     linear,
     linear_fit,
@@ -15,6 +17,7 @@ from utils import (
     calculate_drift,
     calculate_rn_sqrt,
 )
+from widgets.cell import CellWidget
 from widgets.tables.data_table import DataTable
 from widgets.tables.param_table import ParamTable
 
@@ -70,13 +73,17 @@ class Window(QtWidgets.QWidget):
         # Грид с кнопками
         self.cell_group = QtWidgets.QGroupBox("Запись")
         self.cell_layout = QtWidgets.QGridLayout()
-        self.cell_buttons = []
+        self.cell_widgets = []
         for i in range(4):
             for j in range(4):
-                button = QtWidgets.QPushButton(f"Ячейка {i * 4 + j + 1}")
-                button.clicked.connect(lambda checked=False, row=i, col=j: self.cell_button_clicked(row, col))
-                self.cell_layout.addWidget(button, i, j)
-                self.cell_buttons.append(button)
+                index = i * 4 + j + 1
+                cell_widget = CellWidget(self, index, self.param_table)
+                self.cell_layout.addWidget(cell_widget, i, j)
+                self.cell_widgets.append(cell_widget)
+        self.mean_drift = QtWidgets.QLabel("Средний уход: --", self)
+        self.cell_layout.addWidget(self.mean_drift, 4, 0)
+        self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
+        self.cell_layout.addWidget(self.mean_rns, 4, 1)
         self.cell_save_button = QtWidgets.QPushButton("Save cells RnS")
         self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
@@ -93,6 +100,19 @@ class Window(QtWidgets.QWidget):
         self.layout.addWidget(self.data_table)
         self.layout.addLayout(self.right_layout)
         self.setLayout(self.layout)
+
+    def calculate_means(self):
+        rns_list = []
+        drift_list = []
+        for cell in self.cell_widgets:
+            _, drift, rns = self.parse_cell(cell)
+            if drift:
+                drift_list.append(drift)
+            if rns:
+                rns_list.append(rns)
+
+        self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 4)}")
+        self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 4)}")
 
     def calculate_rn05(self):
         """Рассчет Rn^-0.5 для каждого образца"""
@@ -193,22 +213,73 @@ class Window(QtWidgets.QWidget):
         slope = self.param_table.get_column_value(0, ParamTableColumns.SLOPE)
         intercept = self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT)
 
-        self.plot.clear()
-        self.plot.plot(diameter_list, rn_sqrt_list, name="Data", symbolSize=6, symbolBrush="#088F8F")
+        plotItem = self.plot.getPlotItem()
+        items_data = [item for item in plotItem.items if item.name() == "Data"]
+
+        items_fit = [item for item in plotItem.items if item.name() == "Fit"]
+
+        if items_data:
+            items_data[0].setData(diameter_list, rn_sqrt_list)
+        else:
+            self.plot.plot(diameter_list, rn_sqrt_list, name="Data", symbolSize=6, symbolBrush="#088F8F")
+
         if np.min(diameter_list) > drift:
             diameter_list.insert(0, drift)
         if np.max(diameter_list) < drift:
             diameter_list.append(drift)
         y_appr = np.vectorize(lambda x: linear(x, slope, intercept))(diameter_list)
-        pen2 = pg.mkPen(color="#FF0000", width=3)
+
+        if items_fit:
+            items_fit[0].setData(diameter_list, y_appr)
+
+        else:
+            pen2 = pg.mkPen(color="#FF0000", width=3)
+            self.plot.plot(
+                diameter_list,
+                y_appr,
+                name="Fit",
+                pen=pen2,
+                symbolSize=0,
+                symbolBrush=pen2.color(),
+            )
+
+    def addCellData(self, cell: int):
+        Store.update_or_create_item(
+            cell=cell,
+            diameter=self.data_table.get_column_values(DataTableColumns.DIAMETER),
+            rn_sqrt=self.data_table.get_column_values(DataTableColumns.RN),
+            drift=self.param_table.get_column_value(0, ParamTableColumns.DRIFT),
+            slope=self.param_table.get_column_value(0, ParamTableColumns.SLOPE),
+            intercept=self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT),
+        )
+
+    def plot_data(self, cell: int):
+        color = PLOT_COLORS[cell]
+        item = Store.data.get(cell=cell)
+        if not item:
+            return
+        self.plot.plot(item.diameter, item.rn_sqrt, name=f"№{cell}; Data", symbolSize=4, symbolBrush=color)
+        diameter_list = [_ for _ in item.diameter]
+        if np.min(item.diameter) > item.drift:
+            diameter_list.insert(0, item.drift)
+        if np.max(diameter_list) < item.drift:
+            diameter_list.append(item.drift)
+        y_appr = np.vectorize(lambda x: linear(x, item.slope, item.intercept))(diameter_list)
+        pen2 = pg.mkPen(color=color, width=2)
         self.plot.plot(
             diameter_list,
             y_appr,
-            name="Fit",
+            name=f"№{cell}; Fit",
             pen=pen2,
             symbolSize=0,
             symbolBrush=pen2.color(),
         )
+
+    def remove_plot(self, cell: int):
+        plotItem = self.plot.getPlotItem()
+        items_to_remove = [item for item in plotItem.items if item.name().startswith(f"№{cell};")]
+        for item in items_to_remove:
+            plotItem.removeItem(item)
 
     def prepare_plot(self):
         y_label = "Rn^-0.5"
@@ -333,8 +404,14 @@ class Window(QtWidgets.QWidget):
                 if self.param_table.item(0, ParamTableColumns.RNS.index) is not None
                 else ""
             )
-            button = self.cell_buttons[row * 4 + col]
+            button = self.cell_widgets[row * 4 + col]
             button.setText(f"Серия: {series}\nУход: {drift}\nRnS: {rns}")
+
+    @staticmethod
+    def parse_cell(cell):
+        drift = float(cell.drift.text()) if cell.drift.text() else ""
+        rns = float(cell.rns.text()) if cell.rns.text() else ""
+        return [cell.name.text(), drift, rns]
 
     def save_cell_data(self):
         options = QtWidgets.QFileDialog.Options()
@@ -353,14 +430,7 @@ class Window(QtWidgets.QWidget):
         ws = wb.active
         ws.title = "Cell Data"
 
-        def parse_btn_text(btn):
-            text = btn.text()
-            series = text.split("\n")[0].split(": ")[1] if "Серия" in text else text
-            care = text.split("\n")[1].split(": ")[1] if "Уход" in text else ""
-            rns = text.split("\n")[2].split(": ")[1] if "RnS" in text else ""
-            return [series, care, rns]
-
-        init_data = [parse_btn_text(btn) for btn in self.cell_buttons]
+        init_data = [self.parse_cell(cell) for cell in self.cell_widgets]
         output = []
 
         # Разделение исходного массива на блоки по 4 строки
