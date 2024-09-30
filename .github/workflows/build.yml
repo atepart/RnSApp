@@ -42,17 +42,19 @@ jobs:
 
     - name: Archive Release Asset
       if: runner.os == 'Windows'
-      run: Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_Windows_${{ matrix.arch }}.zip
+      run: tar -czvf ./dist/RnSApp_Windows_${{ matrix.arch }}.tar.gz -C ./dist RnSApp
+      shell: bash
 
     - name: Archive Release Asset
       if: runner.os == 'macOS'
-      run: zip -r ./dist/RnSApp_MacOS_${{ matrix.arch }}.zip ./dist/RnSApp.app
+      run: tar -czvf ./dist/RnSApp_MacOS_${{ matrix.arch }}.tar.gz -C ./dist RnSApp.app
+      shell: bash
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: RnSApp_${{ runner.os }}_${{ matrix.arch }}
-        path: ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}.zip
+        path: ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}.tar.gz
 
   release:
     needs: build
@@ -66,25 +68,29 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows_x86
-        path: RnSApp_Windows_x86.zip
+        path: ./dist/RnSApp_Windows_x86.tar.gz
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows_arm64
-        path: RnSApp_Windows_arm64.zip
+        path: ./dist/RnSApp_Windows_arm64.tar.gz
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_macOS_x86
-        path: RnSApp_MacOS_x86.zip
+        path: ./dist/RnSApp_MacOS_x86.tar.gz
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_macOS_arm64
-        path: RnSApp_MacOS_arm64.zip
+        path: ./dist/RnSApp_MacOS_arm64.tar.gz
+
+    - name: List contents of dist directory
+      run: ls -l ./dist
+      shell: bash
 
     - name: Get current date and time
       id: date
@@ -99,28 +105,28 @@ jobs:
 
     - name: Upload Windows x86 Release Asset
       run: |
-        gh release upload v${{ env.date }} RnSApp_Windows_x86.zip
+        gh release upload v${{ env.date }} ./dist/RnSApp_Windows_x86.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload Windows arm64 Release Asset
       run: |
-        gh release upload v${{ env.date }} RnSApp_Windows_arm64.zip
+        gh release upload v${{ env.date }} ./dist/RnSApp_Windows_arm64.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload MacOS x86 Release Asset
       run: |
-        gh release upload v${{ env.date }} RnSApp_MacOS_x86.zip
+        gh release upload v${{ env.date }} ./dist/RnSApp_MacOS_x86.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload MacOS arm64 Release Asset
       run: |
-        gh release upload v${{ env.date }} RnSApp_MacOS_arm64.zip
+        gh release upload v${{ env.date }} ./dist/RnSApp_MacOS_arm64.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
