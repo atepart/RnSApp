@@ -66,25 +66,25 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows_x86
-        path: ./dist/RnSApp_Windows_x86.zip
+        path: RnSApp_Windows_x86.zip
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows_arm64
-        path: ./dist/RnSApp_Windows_arm64.zip
+        path: RnSApp_Windows_arm64.zip
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_macOS_x86
-        path: ./dist/RnSApp_MacOS_x86.zip
+        path: RnSApp_MacOS_x86.zip
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_macOS_arm64
-        path: ./dist/RnSApp_MacOS_arm64.zip
+        path: RnSApp_MacOS_arm64.zip
 
     - name: Get current date and time
       id: date
@@ -99,28 +99,28 @@ jobs:
 
     - name: Upload Windows x86 Release Asset
       run: |
-        gh release upload v${{ env.date }} ./dist/RnSApp_Windows_x86.zip
+        gh release upload v${{ env.date }} RnSApp_Windows_x86.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload Windows arm64 Release Asset
       run: |
-        gh release upload v${{ env.date }} ./dist/RnSApp_Windows_arm64.zip
+        gh release upload v${{ env.date }} RnSApp_Windows_arm64.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload MacOS x86 Release Asset
       run: |
-        gh release upload v${{ env.date }} ./dist/RnSApp_MacOS_x86.zip
+        gh release upload v${{ env.date }} RnSApp_MacOS_x86.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload MacOS arm64 Release Asset
       run: |
-        gh release upload v${{ env.date }} ./dist/RnSApp_MacOS_arm64.zip
+        gh release upload v${{ env.date }} RnSApp_MacOS_arm64.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
