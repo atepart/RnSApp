@@ -16,6 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
+        arch: [x86, arm64]
 
     steps:
     - name: Checkout code
@@ -41,17 +42,17 @@ jobs:
 
     - name: Archive Release Asset
       if: runner.os == 'Windows'
-      run: Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_Windows.zip
+      run: Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_Windows_${{ matrix.arch }}.zip
 
     - name: Archive Release Asset
       if: runner.os == 'macOS'
-      run: zip -r ./dist/RnSApp_MacOS.zip ./dist/RnSApp
+      run: zip -r ./dist/RnSApp_MacOS_${{ matrix.arch }}.zip ./dist/RnSApp.app
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: RnSApp_${{ runner.os }}
-        path: ./dist/RnSApp_${{ runner.os }}.zip
+        name: RnSApp_${{ runner.os }}_${{ matrix.arch }}
+        path: ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}.zip
 
   release:
     needs: build
@@ -61,39 +62,63 @@ jobs:
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
-        name: RnSApp_Windows
-        path: ./dist/RnSApp_Windows.zip
+        name: RnSApp_Windows_x86
+        path: ./dist/RnSApp_Windows_x86.zip
 
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
-        name: RnSApp_macOS
-        path: ./dist/RnSApp_MacOS.zip
+        name: RnSApp_Windows_arm64
+        path: ./dist/RnSApp_Windows_arm64.zip
+
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: RnSApp_macOS_x86
+        path: ./dist/RnSApp_MacOS_x86.zip
+
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: RnSApp_macOS_arm64
+        path: ./dist/RnSApp_MacOS_arm64.zip
 
     - name: Get current date and time
       id: date
-      run: echo "::set-output name=date::$(date +'%Y-%m-%d_%H-%M-%S')"
+      run: echo "date=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
 
     - name: Create Release
       uses: elgohr/Github-Release-Action@v5
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag: v${{ steps.date.outputs.date }}
-        name: Release v${{ steps.date.outputs.date }}
-        draft: false
-        prerelease: false
+        tag: v${{ env.date }}
+        title: Release v${{ env.date }}
 
-    - name: Upload Windows Release Asset
+    - name: Upload Windows x86 Release Asset
       uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        files: ./dist/RnSApp_Windows.zip
+        files: ./dist/RnSApp_Windows_x86.zip
 
-    - name: Upload MacOS Release Asset
+    - name: Upload Windows arm64 Release Asset
       uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        files: ./dist/RnSApp_MacOS.zip
+        files: ./dist/RnSApp_Windows_arm64.zip
+
+    - name: Upload MacOS x86 Release Asset
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: ./dist/RnSApp_MacOS_x86.zip
+
+    - name: Upload MacOS arm64 Release Asset
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: ./dist/RnSApp_MacOS_arm64.zip
