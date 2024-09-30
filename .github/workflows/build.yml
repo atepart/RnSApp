@@ -5,6 +5,10 @@ on:
     branches:
       - master
 
+permissions:
+  packages: write
+  contents: write
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -15,12 +19,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.x'  # Укажите нужную версию Python
+        python-version: '3.11'
 
     - name: Install dependencies
       run: |
@@ -44,7 +48,7 @@ jobs:
         fi
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: RnSApp_${{ runner.os }}
         path: ./dist/RnSApp_${{ runner.os }}.zip
@@ -55,13 +59,13 @@ jobs:
 
     steps:
     - name: Download Artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows
         path: ./dist/RnSApp_Windows.zip
 
     - name: Download Artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with:
         name: RnSApp_macOS
         path: ./dist/RnSApp_MacOS.zip
@@ -71,32 +75,25 @@ jobs:
       run: echo "::set-output name=date::$(date +'%Y-%m-%d_%H-%M-%S')"
 
     - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+      uses: elgohr/Github-Release-Action@v5
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: v${{ steps.date.outputs.date }}
-        release_name: Release v${{ steps.date.outputs.date }}
+        tag: v${{ steps.date.outputs.date }}
+        name: Release v${{ steps.date.outputs.date }}
         draft: false
         prerelease: false
 
     - name: Upload Windows Release Asset
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/RnSApp_Windows.zip
-        asset_name: RnSApp_Windows.zip
-        asset_content_type: application/zip
+        files: ./dist/RnSApp_Windows.zip
 
     - name: Upload MacOS Release Asset
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/RnSApp_MacOS.zip
-        asset_name: RnSApp_MacOS.zip
-        asset_content_type: application/zip
+        files: ./dist/RnSApp_MacOS.zip
