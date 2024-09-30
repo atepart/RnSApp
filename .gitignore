@@ -4,3 +4,6 @@ venv
 *.xlsx
 *.idea
 *.code
+*dist
+*build
+*.spec

@@ -2,6 +2,8 @@ import numpy as np
 
 
 def linear_fit(x, y):
+    """Рассчет линейной аппроксимации"""
+
     def mean(xs):
         return sum(xs) / len(xs)
 
@@ -33,7 +35,8 @@ def linear_fit(x, y):
     return slope, intercept
 
 
-def linear(x, b, a):
+def linear(x: float, b: float, a: float):
+    """Линейная функция"""
     return x * b + a
 
 
@@ -47,6 +50,11 @@ def calculate_rns(slope: float):
     return np.pi * 0.25 / (slope**2)
 
 
-def calculate_rns_per_sample(resistance: float, diameter: float, zero_x: float):
+def calculate_rns_per_sample(resistance: float, diameter: float, drift: float):
     """Рассчет RnS для одного образца"""
-    return resistance * 0.25 * np.pi * (diameter - zero_x) ** 2
+    return resistance * 0.25 * np.pi * (diameter - drift) ** 2
+
+
+def calculate_rn_sqrt(resistance: float):
+    """Рассчет Rn^-0.5"""
+    return 1 / np.sqrt(resistance)
