@@ -92,7 +92,35 @@ jobs:
 
     - name: Create Release
       run: |
-        gh release create v${{ env.date }} --title "Release v${{ env.date }}" --notes "Release v${{ env.date }}" ./dist/*.zip
+        gh release create v${{ env.date }} --title "Release v${{ env.date }}" --notes "Release v${{ env.date }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+
+    - name: Upload Windows x86 Release Asset
+      run: |
+        gh release upload v${{ env.date }} ./dist/RnSApp_Windows_x86.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+
+    - name: Upload Windows arm64 Release Asset
+      run: |
+        gh release upload v${{ env.date }} ./dist/RnSApp_Windows_arm64.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+
+    - name: Upload MacOS x86 Release Asset
+      run: |
+        gh release upload v${{ env.date }} ./dist/RnSApp_MacOS_x86.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+
+    - name: Upload MacOS arm64 Release Asset
+      run: |
+        gh release upload v${{ env.date }} ./dist/RnSApp_MacOS_arm64.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
