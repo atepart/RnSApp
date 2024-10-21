@@ -36,7 +36,7 @@ class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     NAME = ("Имя", str)
     DRIFT = ("Уход", float)
     RNS = ("RnS", float)
-    DIAMETER = ("Диаметр ACAD (μm)", float)
+    DIAMETER = ("Диаметр (μm)", float)
     RESISTANCE = ("Сопротивление (Ω)", float)
     RN = ("Rn^-0.5", float)
 

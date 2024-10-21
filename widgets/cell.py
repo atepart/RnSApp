@@ -13,30 +13,35 @@ class CellWidget(QtWidgets.QGroupBox):
     def initUI(self):
 
         layout = QtWidgets.QVBoxLayout()
-        hlayout = QtWidgets.QHBoxLayout()
+        hlayout1 = QtWidgets.QHBoxLayout()
+        hlayout2 = QtWidgets.QHBoxLayout()
+
+        self.number = QtWidgets.QLabel(self)
+        self.number.setText(f"№{self.index}")
+        hlayout1.addWidget(self.number)
 
         self.name = QtWidgets.QLabel(self)
-        self.name.setText(f"Ячейка №{self.index}")
-        layout.addWidget(self.name)
+        hlayout1.addWidget(self.name)
 
         self.drift = QtWidgets.QLabel(self)
         self.drift.setToolTip("Уход")
-        hlayout.addWidget(self.drift)
+        hlayout2.addWidget(self.drift)
         self.drift.setVisible(False)
 
         self.rns = QtWidgets.QLabel(self)
         self.rns.setToolTip("RnS")
-        hlayout.addWidget(self.rns)
+        hlayout2.addWidget(self.rns)
         self.rns.setVisible(False)
 
-        layout.addLayout(hlayout)
+        layout.addLayout(hlayout1)
+        layout.addLayout(hlayout2)
 
         self.writeButton = QtWidgets.QPushButton("Записать")
         self.writeButton.clicked.connect(self.openWriteDialog)
         layout.addWidget(self.writeButton)
 
         self.rewriteButton = QtWidgets.QPushButton("Переписать данные")
-        self.rewriteButton.clicked.connect(self.rewriteData)
+        self.rewriteButton.clicked.connect(self.openRewriteDataDialog)
         layout.addWidget(self.rewriteButton)
         self.rewriteButton.setVisible(False)
 
@@ -81,7 +86,8 @@ class CellWidget(QtWidgets.QGroupBox):
         if name and ok:
             self.name.setText(name)
 
-    def rewriteData(self):
+    def openRewriteDataDialog(self):
+        # Логика для открытия окна для перезаписи
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle("Перезапись данных")
         dialog.setLayout(QtWidgets.QVBoxLayout())
@@ -110,7 +116,7 @@ class CellWidget(QtWidgets.QGroupBox):
         menu.addAction(renameAction)
 
         rewriteAction = QtWidgets.QAction("Перезаписать", self)
-        rewriteAction.triggered.connect(self.rewriteData)
+        rewriteAction.triggered.connect(self.openRewriteDataDialog)
         menu.addAction(rewriteAction)
 
         # Показ контекстного меню в позиции курсора

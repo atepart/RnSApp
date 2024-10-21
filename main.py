@@ -1,4 +1,3 @@
-import re
 import sys
 import numpy as np
 import openpyxl
@@ -47,21 +46,20 @@ class Window(QtWidgets.QWidget):
         self.actions_group = QtWidgets.QGroupBox("Действия")
         self.actions_layout = QtWidgets.QHBoxLayout()
 
-        self.result_button = QtWidgets.QPushButton("Result")
-        self.result_button.setToolTip("Произвести рассчет")
+        self.result_button = QtWidgets.QPushButton("Рассчитать")
+        self.result_button.setToolTip("Произвести рассчеты")
         self.result_button.clicked.connect(self.calculate_results)
 
-        self.clean_rn_button = QtWidgets.QPushButton("Clear Rn")
+        self.clean_rn_button = QtWidgets.QPushButton("Очистить Rn")
         self.clean_rn_button.setToolTip("Очистить Rn")
         self.clean_rn_button.clicked.connect(self.clean_rn)
 
-        self.clean_all_button = QtWidgets.QPushButton("Clear All")
+        self.clean_all_button = QtWidgets.QPushButton("Очистить все")
         self.clean_all_button.setToolTip("Очистить все данные")
         self.clean_all_button.clicked.connect(self.clean_all)
 
-        self.save_button = QtWidgets.QPushButton("Save All data")
+        self.save_button = QtWidgets.QPushButton("Сохранить все")
         self.save_button.setToolTip("Сохранить входные данные и рассчет")
-        self.save_button = QtWidgets.QPushButton("Save")
         self.save_button.clicked.connect(self.save_data)
 
         self.actions_layout.addWidget(self.result_button)
@@ -84,7 +82,7 @@ class Window(QtWidgets.QWidget):
         self.cell_layout.addWidget(self.mean_drift, 4, 0)
         self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
         self.cell_layout.addWidget(self.mean_rns, 4, 1)
-        self.cell_save_button = QtWidgets.QPushButton("Save cells RnS")
+        self.cell_save_button = QtWidgets.QPushButton("Сохранить ячейки")
         self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
@@ -221,7 +219,7 @@ class Window(QtWidgets.QWidget):
         if items_data:
             items_data[0].setData(diameter_list, rn_sqrt_list)
         else:
-            self.plot.plot(diameter_list, rn_sqrt_list, name="Data", symbolSize=6, symbolBrush="#088F8F")
+            self.plot.plot(diameter_list, rn_sqrt_list, name="Data", symbolSize=6, symbolBrush="#000000")
 
         if np.min(diameter_list) > drift:
             diameter_list.insert(0, drift)
@@ -233,7 +231,7 @@ class Window(QtWidgets.QWidget):
             items_fit[0].setData(diameter_list, y_appr)
 
         else:
-            pen2 = pg.mkPen(color="#FF0000", width=3)
+            pen2 = pg.mkPen(color="#000000", width=3)
             self.plot.plot(
                 diameter_list,
                 y_appr,
@@ -350,7 +348,6 @@ class Window(QtWidgets.QWidget):
                 DataTableColumns.RN.index,
                 QtWidgets.QTableWidgetItem(""),
             )  # Clear Rn^-0.5 column
-        self.plot.clear()
 
     def clean_all(self):
         for row in range(self.data_table.rowCount()):
@@ -390,22 +387,6 @@ class Window(QtWidgets.QWidget):
                 QtWidgets.QTableWidgetItem(str(row + 1)),
             )  # Clear Number column
         self.plot.clear()
-
-    def cell_button_clicked(self, row, col):
-        series, ok = QtWidgets.QInputDialog.getText(self, "Input Dialog", "Enter series:")
-        if ok:
-            drift = (
-                self.param_table.item(0, ParamTableColumns.DRIFT.index).text()
-                if self.param_table.item(0, ParamTableColumns.DRIFT.index) is not None
-                else ""
-            )
-            rns = (
-                self.param_table.item(0, ParamTableColumns.RNS.index).text()
-                if self.param_table.item(0, ParamTableColumns.RNS.index) is not None
-                else ""
-            )
-            button = self.cell_widgets[row * 4 + col]
-            button.setText(f"Серия: {series}\nУход: {drift}\nRnS: {rns}")
 
     @staticmethod
     def parse_cell(cell):
