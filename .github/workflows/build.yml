@@ -60,7 +60,6 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows_x86
-        path: ./RnSApp_Windows_x86.zip
 
     - name: List contents
       run: ls -l .
