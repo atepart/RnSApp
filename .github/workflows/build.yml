@@ -60,7 +60,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: RnSApp_Windows_x86
-        path: ./dist/RnSApp_Windows_x86.tar.gz
+        path: ./dist/RnSApp_Windows_x86.zip
 
     - name: List contents of dist directory
       run: ls -l ./dist
@@ -68,14 +68,14 @@ jobs:
 
     - name: Create Release
       run: |
-        gh release create v${{ github.ref_name }} --title "Release v${{ env.date }}" --notes "Release ${{ github.ref_name }}"
+        gh release create ${{ github.ref_name }} --title "Release ${{ github.ref_name }}" --notes "Release ${{ github.ref_name }}"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
 
     - name: Upload Windows x86 Release Asset
       run: |
-        gh release upload v${{ github.ref_name }} ./dist/RnSApp_Windows_x86.zip
+        gh release upload ${{ github.ref_name }} ./dist/RnSApp_Windows_x86.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: bash
