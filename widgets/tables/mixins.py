@@ -12,12 +12,8 @@ class TableMixin:
         values = []
         for row in range(self.rowCount()):
             value = self.item(row, column.index)
-            if not value:
-                continue
-            if not value.text():
-                continue
             try:
                 values.append(column.dtype(value.text()))
-            except ValueError:
-                continue
+            except (ValueError, AttributeError):
+                values.append("")
         return values

@@ -7,6 +7,7 @@ from PyQt5.QtGui import QIcon
 from openpyxl.styles import Side, Border, Font
 
 from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS
+from errors import ListsNotSameLength
 from store import Store
 from utils import (
     linear,
@@ -15,6 +16,7 @@ from utils import (
     calculate_rns_per_sample,
     calculate_drift,
     calculate_rn_sqrt,
+    drop_nans,
 )
 from widgets.cell import CellWidget
 from widgets.tables.data_table import DataTable
@@ -116,7 +118,8 @@ class Window(QtWidgets.QWidget):
         """Рассчет Rn^-0.5 для каждого образца"""
         for row in range(self.data_table.rowCount()):
             resistance = self.data_table.get_column_value(row, DataTableColumns.RESISTANCE)
-            if not resistance:
+            diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
+            if not resistance or not diameter:
                 continue
             rn_sqrt = calculate_rn_sqrt(resistance)
             self.data_table.setItem(row, DataTableColumns.RN.index, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
@@ -125,7 +128,9 @@ class Window(QtWidgets.QWidget):
         """Рассчет Наклона, Пересечения, RnS, Ухода в целом"""
         diameter_list = self.data_table.get_column_values(DataTableColumns.DIAMETER)
         rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN)
-        if not (len(diameter_list) > 1 and len(rn_sqrt_list) > 1):
+        try:
+            diameter_list, rn_sqrt_list = drop_nans(diameter_list, rn_sqrt_list)
+        except ListsNotSameLength:
             return
         slope, intercept = linear_fit(diameter_list, rn_sqrt_list)
 
@@ -157,7 +162,7 @@ class Window(QtWidgets.QWidget):
 
     def calculate_error_params(self):
         """Рассчет ошибок RnS и Ухода"""
-        rns_list = np.array(self.data_table.get_column_values(DataTableColumns.RNS))
+        rns_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.RNS) if v], dtype=float)
         rns_error = np.std(rns_list)
         self.param_table.setItem(
             0,
@@ -166,7 +171,7 @@ class Window(QtWidgets.QWidget):
         )
 
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
-        drift_list = np.array(self.data_table.get_column_values(DataTableColumns.DRIFT))
+        drift_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.DRIFT) if v], dtype=float)
         drift_error = np.sqrt(np.sum((drift_list - drift) ** 2))
         self.param_table.setItem(
             0,
@@ -184,7 +189,7 @@ class Window(QtWidgets.QWidget):
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
             resistance = self.data_table.get_column_value(row, DataTableColumns.RESISTANCE)
             if not resistance or not diameter:
-                return
+                continue
 
             rns_value = calculate_rns_per_sample(resistance=resistance, diameter=diameter, drift=drift)
             self.data_table.setItem(
@@ -207,6 +212,15 @@ class Window(QtWidgets.QWidget):
     def plot_current_data(self):
         diameter_list = self.data_table.get_column_values(DataTableColumns.DIAMETER)
         rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN)
+        try:
+            diameter_list, rn_sqrt_list = drop_nans(diameter_list, rn_sqrt_list)
+            diameter_list, rn_sqrt_list = np.array(
+                sorted(np.array([diameter_list, rn_sqrt_list]).T, key=lambda x: x[0]), dtype=float
+            ).T
+            diameter_list = diameter_list.tolist()
+            rn_sqrt_list = rn_sqrt_list.tolist()
+        except ListsNotSameLength:
+            return
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         slope = self.param_table.get_column_value(0, ParamTableColumns.SLOPE)
         intercept = self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT)
@@ -244,11 +258,12 @@ class Window(QtWidgets.QWidget):
     def addCellData(self, cell: int):
         Store.update_or_create_item(
             cell=cell,
-            diameter=self.data_table.get_column_values(DataTableColumns.DIAMETER),
-            rn_sqrt=self.data_table.get_column_values(DataTableColumns.RN),
+            diameter_list=self.data_table.get_column_values(DataTableColumns.DIAMETER),
+            rn_sqrt_list=self.data_table.get_column_values(DataTableColumns.RN),
             drift=self.param_table.get_column_value(0, ParamTableColumns.DRIFT),
             slope=self.param_table.get_column_value(0, ParamTableColumns.SLOPE),
             intercept=self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT),
+            initial_data=self.data_table.dump_data(),
         )
 
     def plot_data(self, cell: int):
@@ -256,9 +271,10 @@ class Window(QtWidgets.QWidget):
         item = Store.data.get(cell=cell)
         if not item:
             return
-        self.plot.plot(item.diameter, item.rn_sqrt, name=f"№{cell}; Data", symbolSize=4, symbolBrush=color)
-        diameter_list = [_ for _ in item.diameter]
-        if np.min(item.diameter) > item.drift:
+        diameter, rn_sqrt = drop_nans(item.diameter, item.rn_sqrt)
+        self.plot.plot(diameter, rn_sqrt, name=f"№{cell}; Data", symbolSize=4, symbolBrush=color)
+        diameter_list = diameter.tolist()
+        if np.min(diameter_list) > item.drift:
             diameter_list.insert(0, item.drift)
         if np.max(diameter_list) < item.drift:
             diameter_list.append(item.drift)
@@ -327,65 +343,12 @@ class Window(QtWidgets.QWidget):
         wb.save(filename=file_name)
 
     def clean_rn(self):
-        for row in range(self.data_table.rowCount()):
-            self.data_table.setItem(
-                row,
-                DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear RnS column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.DRIFT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Drift column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.RESISTANCE.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Resistance column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.RN.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Rn^-0.5 column
+        self.data_table.clear_rn()
+        self.param_table.clear_all()
 
     def clean_all(self):
-        for row in range(self.data_table.rowCount()):
-            self.data_table.setItem(
-                row,
-                DataTableColumns.NAME.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Name column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear RnS column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.DRIFT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Drift column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.DIAMETER.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Diameter column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.RESISTANCE.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Resistance column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.RN.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Rn^-0.5 column
-            self.data_table.setItem(
-                row,
-                DataTableColumns.NUMBER.index,
-                QtWidgets.QTableWidgetItem(str(row + 1)),
-            )  # Clear Number column
+        self.data_table.clear_all()
+        self.param_table.clear_all()
         self.plot.clear()
 
     @staticmethod

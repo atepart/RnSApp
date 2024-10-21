@@ -1,22 +1,39 @@
+from dataclasses import dataclass
 from typing import List, Optional
+
+
+@dataclass
+class InitialDataItem:
+    value: str
+    row: int
+    col: int
+
+    @property
+    def dict(self):
+        return self.__dict__
+
+    def __getitem__(self, item):
+        return getattr(self, item)
 
 
 class Item:
     def __init__(
         self,
         cell: int,
-        diameter: List[float],
-        rn_sqrt: List[float],
+        diameter_list: List[float],
+        rn_sqrt_list: List[float],
         drift: float,
         slope: float,
         intercept: float,
+        initial_data: List[InitialDataItem],
     ):
         self.cell = cell
-        self.diameter = diameter
-        self.rn_sqrt = rn_sqrt
+        self.diameter = diameter_list
+        self.rn_sqrt = rn_sqrt_list
         self.drift = drift
         self.slope = slope
         self.intercept = intercept
+        self.initial_data = initial_data
         self.is_plot = False
 
 

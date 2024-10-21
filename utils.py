@@ -1,5 +1,7 @@
 import numpy as np
 
+from errors import ListsNotSameLength
+
 
 def linear_fit(x, y):
     """Рассчет линейной аппроксимации"""
@@ -38,6 +40,15 @@ def linear_fit(x, y):
 def linear(x: float, b: float, a: float):
     """Линейная функция"""
     return x * b + a
+
+
+def drop_nans(arr1: list, arr2: list):
+    if len(arr1) != len(arr2):
+        raise ListsNotSameLength
+    return np.array([arr for arr in np.array([arr1, arr2]).T if all(arr)], dtype=float).T
+
+
+# Рассчетные функции
 
 
 def calculate_drift(diameter: float, resistance: float, rns: float):

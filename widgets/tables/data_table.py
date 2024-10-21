@@ -1,8 +1,11 @@
+from typing import List
+
 import numpy as np
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QHeaderView
 
 from constants import DataTableColumns
+from store import InitialDataItem
 from widgets.delegates import ReadOnlyDelegate
 from widgets.tables.mixins import TableMixin
 
@@ -154,3 +157,80 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
     def get_column_value(self, row: int, column: DataTableColumns):
         return super().get_column_value(row, column)
+
+    def clear_all(self):
+        for row in range(self.rowCount()):
+            self.setItem(
+                row,
+                DataTableColumns.NAME.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Name column
+            self.setItem(
+                row,
+                DataTableColumns.RNS.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear RnS column
+            self.setItem(
+                row,
+                DataTableColumns.DRIFT.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Drift column
+            self.setItem(
+                row,
+                DataTableColumns.DIAMETER.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Diameter column
+            self.setItem(
+                row,
+                DataTableColumns.RESISTANCE.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Resistance column
+            self.setItem(
+                row,
+                DataTableColumns.RN.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Rn^-0.5 column
+            self.setItem(
+                row,
+                DataTableColumns.NUMBER.index,
+                QtWidgets.QTableWidgetItem(str(row + 1)),
+            )  # Clear Number column
+
+    def clear_rn(self):
+        for row in range(self.rowCount()):
+            self.setItem(
+                row,
+                DataTableColumns.RNS.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear RnS column
+            self.setItem(
+                row,
+                DataTableColumns.DRIFT.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Drift column
+            self.setItem(
+                row,
+                DataTableColumns.RESISTANCE.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Resistance column
+            self.setItem(
+                row,
+                DataTableColumns.RN.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Rn^-0.5 column
+
+    def dump_data(self):
+        data = []
+        for row in range(self.rowCount()):
+            for col in range(self.columnCount()):
+                item = self.item(row, col)
+                if not item:
+                    item = ""
+                else:
+                    item = item.text()
+                data.append(InitialDataItem(value=item, row=row, col=col))
+        return data
+
+    def load_data(self, data: List[InitialDataItem]):
+        for item in data:
+            self.setItem(item["row"], item["col"], QtWidgets.QTableWidgetItem(f"{item['value']}"))

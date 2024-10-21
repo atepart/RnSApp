@@ -18,3 +18,11 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
 
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)
+
+    def clear_all(self):
+        for col in range(self.columnCount()):
+            self.setItem(
+                0,
+                col,
+                QtWidgets.QTableWidgetItem(""),
+            )
