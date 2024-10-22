@@ -580,16 +580,16 @@ class Window(QtWidgets.QWidget):
                 self.calculate_means()
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(None, "Ошибка чтения", f"Возникли ошибки чтения файла: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "Ошибка чтения", f"Возникли ошибки чтения файла: {str(e)}")
             return
 
         if is_some_errors:
             QtWidgets.QMessageBox.warning(
-                None, "Файл прочитался с ошибками", "Часть данных могла прочитаться некорректно!"
+                self, "Файл прочитался с ошибками", "Часть данных могла прочитаться некорректно!"
             )
             return
 
-        QtWidgets.QMessageBox.information(None, "Файл успешно прочитан", "Все данные успешно загружены")
+        QtWidgets.QMessageBox.information(self, "Файл успешно прочитан", "Все данные успешно загружены")
 
 
 if __name__ == "__main__":

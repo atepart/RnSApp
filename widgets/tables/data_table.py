@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QHeaderView
 
 from constants import DataTableColumns
 from store import InitialDataItem
-from widgets.delegates import RoundedDelegate
+from widgets.delegates import RoundedDelegate, AlignDelegate
 from widgets.tables.mixins import TableMixin
 
 
@@ -16,10 +16,10 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         # Set Table headers
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
         self.setColumnWidth(DataTableColumns.NUMBER.index, 30)
-        self.setColumnWidth(DataTableColumns.NAME.index, 120)
-        self.setColumnWidth(DataTableColumns.RESISTANCE.index, 120)
-        self.setColumnWidth(DataTableColumns.RNS.index, 100)
-        self.setColumnWidth(DataTableColumns.RN_SQRT.index, 100)
+        self.setColumnWidth(DataTableColumns.NAME.index, 170)
+        self.setColumnWidth(DataTableColumns.RESISTANCE.index, 170)
+        self.setColumnWidth(DataTableColumns.RNS.index, 120)
+        self.setColumnWidth(DataTableColumns.RN_SQRT.index, 120)
         header = self.horizontalHeader()
         header.setSectionResizeMode(DataTableColumns.DIAMETER.index, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
@@ -34,6 +34,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
         # Set default Numbers
         self.set_default_numbers()
+
+        self.setItemDelegate(AlignDelegate(self))
 
         # Set columns RnS, Rn, Drift, Square as read-only
         self.set_read_only_columns(

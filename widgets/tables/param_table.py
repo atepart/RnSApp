@@ -2,7 +2,7 @@ from PyQt5 import QtWidgets
 
 from constants import ParamTableColumns
 from store import Item
-from widgets.delegates import RoundedDelegate
+from widgets.delegates import RoundedDelegate, AlignDelegate
 from widgets.tables.mixins import TableMixin
 
 
@@ -35,6 +35,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.RNS.index, RoundedDelegate(rounded=1, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
+
+        self.setItemDelegate(AlignDelegate(self))
 
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)
