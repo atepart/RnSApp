@@ -69,3 +69,8 @@ def calculate_rns_per_sample(resistance: float, diameter: float, drift: float):
 def calculate_rn_sqrt(resistance: float):
     """Рассчет Rn^-0.5"""
     return 1 / np.sqrt(resistance)
+
+
+def calculate_square(diameter: float, drift: float):
+    """Рассчет площади"""
+    return (diameter - drift) ** 2 * np.pi / 4

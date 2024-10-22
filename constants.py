@@ -34,10 +34,11 @@ class TableColumns(Enum, metaclass=TableColumnsMeta):
 class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     NUMBER = ("№", int)
     NAME = ("Имя", str)
-    DRIFT = ("Уход", float)
-    RNS = ("RnS", float)
     DIAMETER = ("Диаметр (μm)", float)
-    RESISTANCE = ("Сопротивление (Ω)", float)
+    RESISTANCE = ("Rn (Ω)", float)
+    RNS = ("RnS", float)
+    DRIFT = ("Уход (μm)", float)
+    SQUARE = ("Площадь (μm^2)", float)
     RN = ("Rn^-0.5", float)
 
 

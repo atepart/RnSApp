@@ -17,6 +17,7 @@ from utils import (
     calculate_drift,
     calculate_rn_sqrt,
     drop_nans,
+    calculate_square,
 )
 from widgets.cell import CellWidget
 from widgets.tables.data_table import DataTable
@@ -179,8 +180,8 @@ class Window(QtWidgets.QWidget):
             QtWidgets.QTableWidgetItem(str(round(drift_error, 4))),
         )
 
-    def calculate_rns_drift_per_sample(self):
-        """Рассчет RnS и Ухода для каждого образца по отдельности"""
+    def calculate_rns_drift_square_per_sample(self):
+        """Рассчет RnS, Ухода и Площади для каждого образца по отдельности"""
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         if not drift:
             return
@@ -207,10 +208,15 @@ class Window(QtWidgets.QWidget):
                 row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(round(drift_value, 4)))
             )
 
+            square_value = calculate_square(diameter=diameter, drift=drift_value)
+            self.data_table.setItem(
+                row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(str(round(square_value, 4)))
+            )
+
     def calculate_results(self):
         self.calculate_rn05()
         self.calculate_main_params()
-        self.calculate_rns_drift_per_sample()
+        self.calculate_rns_drift_square_per_sample()
         self.calculate_error_params()
         self.plot_current_data()
 
