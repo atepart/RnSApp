@@ -1,14 +1,15 @@
 import sys
+import re
 import numpy as np
 import openpyxl
 from PyQt5 import QtWidgets
 import pyqtgraph as pg
 from PyQt5.QtGui import QIcon
-from openpyxl.styles import Side, Border, Font
+from openpyxl.styles import Side, Border, Font, Alignment
 
 from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS
 from errors import ListsNotSameLength
-from store import Store
+from store import Store, InitialDataItem, InitialDataItemList
 from utils import (
     linear,
     linear_fit,
@@ -76,25 +77,43 @@ class Window(QtWidgets.QWidget):
         self.actions_layout.addWidget(self.save_button)
         self.actions_group.setLayout(self.actions_layout)
 
-        # Грид с кнопками
+        # Грид с ячейками
         self.cell_group = QtWidgets.QGroupBox("Запись")
-        self.cell_layout = QtWidgets.QGridLayout()
+        self.cell_v_layout = QtWidgets.QVBoxLayout()
+        self.cell_h_layout = QtWidgets.QHBoxLayout()
+        self.cell_grid_layout = QtWidgets.QGridLayout()
         self.cell_widgets = []
         for i in range(4):
             for j in range(4):
                 index = i * 4 + j + 1
                 cell_widget = CellWidget(self, index, self.param_table)
-                self.cell_layout.addWidget(cell_widget, i, j)
+                self.cell_grid_layout.addWidget(cell_widget, i, j)
                 self.cell_widgets.append(cell_widget)
+
         self.mean_drift = QtWidgets.QLabel("Средний уход: --", self)
-        self.cell_layout.addWidget(self.mean_drift, 4, 0)
         self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
-        self.cell_layout.addWidget(self.mean_rns, 4, 1)
+
+        self.btn_load_cell_data = QtWidgets.QPushButton("Загрузить из файла")
+        self.btn_load_cell_data.setToolTip("Загрузить данные из xlsx файла")
+        self.btn_load_cell_data.clicked.connect(self.load_cell_data)
+
+        self.btn_clear_cell_data = QtWidgets.QPushButton("Очистить ячейки")
+        self.btn_clear_cell_data.setToolTip("Очистить ячейки с записанными данными")
+        self.btn_clear_cell_data.clicked.connect(self.clear_cell_data)
+
         self.cell_save_button = QtWidgets.QPushButton("Сохранить ячейки")
         self.cell_save_button.setToolTip("Сохранить записанные ячейки с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
-        self.cell_layout.addWidget(self.cell_save_button, 4, 3)
-        self.cell_group.setLayout(self.cell_layout)
+
+        self.cell_h_layout.addWidget(self.mean_drift)
+        self.cell_h_layout.addWidget(self.mean_rns)
+        self.cell_h_layout.addWidget(self.btn_clear_cell_data)
+        self.cell_h_layout.addWidget(self.btn_load_cell_data)
+        self.cell_h_layout.addWidget(self.cell_save_button)
+
+        self.cell_v_layout.addLayout(self.cell_grid_layout)
+        self.cell_v_layout.addLayout(self.cell_h_layout)
+        self.cell_group.setLayout(self.cell_v_layout)
 
         # Добавляем виджеты в левый лейаут
         self.left_layout.addWidget(self.data_table_label)
@@ -393,8 +412,8 @@ class Window(QtWidgets.QWidget):
             return
 
         wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Cells data"
+        ws_cells = wb.active
+        ws_cells.title = "Cells data"
 
         init_data = [self.parse_cell(cell) for cell in self.cell_widgets]
         output = []
@@ -410,16 +429,52 @@ class Window(QtWidgets.QWidget):
             output.extend(block_transposed)
         for row_ind, row in enumerate(output, 1):
             for col_ind, coll in enumerate(row, 1):
-                ws.cell(row=row_ind, column=col_ind, value=coll)
+                cell = ws_cells.cell(row=row_ind, column=col_ind, value=coll)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
                 if (row_ind - 1) % 3 == 0:  # для клеток с названием серии
-                    ws.cell(row=row_ind, column=col_ind).border = Border(
+                    cell.border = Border(
                         right=Side(style="thick"),
+                        left=Side(style="thick"),
                         top=Side("thick"),
                         bottom=Side(style="thick"),
                     )
-                    ws.cell(row=row_ind, column=col_ind).font = Font(bold=True)
+                    cell.font = Font(bold=True)
+                elif (row_ind - 3) % 3 == 0:  # для клеток с названием rns
+                    cell.border = Border(
+                        right=Side(style="thick"), left=Side(style="thick"), bottom=Side(style="thick")
+                    )
                 else:  # для остальных клеток
-                    ws.cell(row=row_ind, column=col_ind).border = Border(right=Side(style="thick"))
+                    cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
+
+        # Устанавливаем ширину всех столбцов
+        for col in ws_cells.columns:
+            column = col[0].column_letter  # Получаем букву столбца
+            ws_cells.column_dimensions[column].width = 12
+
+        # Устанавливаем высоту для всех строк
+        for row in ws_cells.rows:
+            ws_cells.row_dimensions[row[0].row].height = 21
+
+        # Сохраняем все данные
+        data_headers = [self.data_table.horizontalHeaderItem(i).text() for i in range(self.data_table.columnCount())]
+        results_headers = [
+            self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())
+        ]
+        for cell_data in Store.data:
+            ws_data = wb.create_sheet(f"Data №{cell_data.cell} {cell_data.name}")
+            ws_data.append(data_headers)
+            for dat in cell_data.initial_data:
+                ws_data.cell(row=dat["row"] + 2, column=dat["col"] + 1, value=dat["value"])
+
+            ws_results = wb.create_sheet(f"Results №{cell_data.cell} {cell_data.name}")
+            ws_results.append(results_headers)
+            ws_results.cell(row=2, column=1, value=cell_data.slope)
+            ws_results.cell(row=2, column=2, value=cell_data.intercept)
+            ws_results.cell(row=2, column=3, value=cell_data.drift)
+            ws_results.cell(row=2, column=4, value=cell_data.rns)
+            ws_results.cell(row=2, column=5, value=cell_data.drift_error)
+            ws_results.cell(row=2, column=6, value=cell_data.rns_error)
+
         # Save the Excel file
         if not file_name.endswith(".xlsx"):
             file_name += ".xlsx"
@@ -432,6 +487,109 @@ class Window(QtWidgets.QWidget):
         self.data_table.load_data(data=cell_data.initial_data)
         self.param_table.load_data(data=cell_data)
         self.plot_current_data()
+
+    def clear_cell_data(self):
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Очистить записанные данные ячеек",
+            "Записанные данные ячеек будут удалены, продолжить?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+
+        if reply == QtWidgets.QMessageBox.Yes:
+            for cell in self.cell_widgets:
+                cell.clear()
+            Store.clear()
+
+    def load_cell_data(self):
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Загрузка данных их файла",
+            "Все текущие данные будут очищены, продолжить?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+
+        if reply != QtWidgets.QMessageBox.Yes:
+            return
+
+        options = QtWidgets.QFileDialog.Options()
+        fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
+            None, "Выберите файл XLSX", "", "Excel Files (*.xlsx);;All Files (*)", options=options
+        )
+
+        if not fileName:
+            return
+
+        is_some_errors = False
+        try:
+            wb = openpyxl.load_workbook(fileName)
+            sheet_names = "\n".join(wb.sheetnames)
+            count = (len(wb.sheetnames) - 1) // 2 + 1
+            for i in range(1, count):
+                try:
+                    data_name = re.findall(f"(Data №{i} .*)", sheet_names)[0]
+                    result_name = re.findall(f"(Results №{i} .*)", sheet_names)[0]
+                    cell_name = re.findall(f"Data №{i} (.*)", data_name)[0]
+                except IndexError:
+                    is_some_errors = True
+                    continue
+
+                ws_data = wb[data_name]
+                ws_result = wb[result_name]
+
+                initial_data = InitialDataItemList()
+                for row in range(2, ws_data.max_row + 1):
+                    for col in range(0, ws_data.max_column):
+                        try:
+                            value = ws_data[row][col].value
+                            if not value:
+                                value = ""
+                            initial_data.append(InitialDataItem(row=row - 2, col=col, value=value))
+                        except IndexError:
+                            is_some_errors = True
+                            continue
+
+                diameter_list = [
+                    float(v.value) for v in initial_data.filter(col=DataTableColumns.DIAMETER.index) if v.value
+                ]
+                rn_sqrt_list = [
+                    float(v.value) for v in initial_data.filter(col=DataTableColumns.RN_SQRT.index) if v.value
+                ]
+
+                cell_item = Store.update_or_create_item(
+                    cell=i,
+                    name=cell_name,
+                    diameter_list=diameter_list,
+                    rn_sqrt_list=rn_sqrt_list,
+                    slope=ws_result[2][ParamTableColumns.SLOPE.index].value,
+                    intercept=ws_result[2][ParamTableColumns.INTERCEPT.index].value,
+                    drift=ws_result[2][ParamTableColumns.DRIFT.index].value,
+                    rns=ws_result[2][ParamTableColumns.RNS.index].value,
+                    drift_error=ws_result[2][ParamTableColumns.DRIFT_ERROR.index].value,
+                    rns_error=ws_result[2][ParamTableColumns.RNS_ERROR.index].value,
+                    initial_data=initial_data,
+                )
+
+                cell_widget = self.cell_widgets[cell_item.cell - 1]
+                cell_widget.name.setText(cell_item.name)
+                cell_widget.drift.setText(str(round(cell_item.drift, 3)))
+                cell_widget.rns.setText(str(round(cell_item.rns, 1)))
+                cell_widget.updateUI()
+                self.calculate_means()
+
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(None, "Ошибка чтения", f"Возникли ошибки чтения файла: {str(e)}")
+            return
+
+        if is_some_errors:
+            QtWidgets.QMessageBox.warning(
+                None, "Файл прочитался с ошибками", "Часть данных могла прочитаться некорректно!"
+            )
+            return
+
+        QtWidgets.QMessageBox.information(None, "Файл успешно прочитан", "Все данные успешно загружены")
 
 
 if __name__ == "__main__":

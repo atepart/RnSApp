@@ -48,6 +48,8 @@ class CellWidget(QtWidgets.QGroupBox):
 
         self.setLayout(layout)
 
+        self.customContextMenuRequested.connect(self.showContextMenu)
+
     def openWriteDialog(self):
         name, ok = QtWidgets.QInputDialog.getText(self, "Запись", "Введите уникальное имя:")
         if ok and name:
@@ -73,13 +75,15 @@ class CellWidget(QtWidgets.QGroupBox):
             self.drift.setVisible(True)
             self.checkbox.setVisible(True)
             self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
-            self.customContextMenuRequested.connect(self.showContextMenu)
 
     def buildGraph(self, state):
+        cell_data = Store.data.get(cell=self.index)
         if state == QtCore.Qt.CheckState.Checked:
             self.parent().parent().plot_data(self.index)
+            cell_data.is_plot = True
         else:
             self.parent().parent().remove_plot(self.index)
+            cell_data.is_plot = False
 
     def openRenameDialog(self):
         # Логика для открытия окна для переименования
@@ -92,8 +96,9 @@ class CellWidget(QtWidgets.QGroupBox):
                 return
             self.name.setText(name)
             self.parent().parent().remove_plot(cell=self.index)
-            Store.update_or_create_item(cell=self.index, name=name)
-            self.parent().parent().plot_data(cell=self.index)
+            cell_data = Store.update_or_create_item(cell=self.index, name=name)
+            if cell_data.is_plot:
+                self.parent().parent().plot_data(cell=self.index)
 
     def openRewriteDataDialog(self):
         # Логика для открытия окна для перезаписи
@@ -146,3 +151,13 @@ class CellWidget(QtWidgets.QGroupBox):
 
         # Показ контекстного меню в позиции курсора
         menu.exec_(self.mapToGlobal(position))
+
+    def clear(self):
+        self.name.setText("")
+        self.rns.setText("")
+        self.drift.setText("")
+        self.rns.setVisible(False)
+        self.drift.setVisible(False)
+        self.checkbox.setVisible(False)
+        self.writeButton.setVisible(True)
+        self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
