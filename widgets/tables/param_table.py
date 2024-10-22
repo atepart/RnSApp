@@ -16,6 +16,17 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         # self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Preferred)
         self.setFixedHeight(self.rowHeight(0) + self.horizontalHeader().height())
 
+        self.set_read_only_columns(
+            [
+                ParamTableColumns.SLOPE.index,
+                ParamTableColumns.INTERCEPT.index,
+                ParamTableColumns.RNS.index,
+                ParamTableColumns.DRIFT.index,
+                ParamTableColumns.RNS_ERROR.index,
+                ParamTableColumns.DRIFT_ERROR.index,
+            ]
+        )
+
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)
 

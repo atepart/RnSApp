@@ -63,7 +63,7 @@ class CellWidget(QtWidgets.QGroupBox):
         self.rns.setText(f"{self.param_table.get_column_value(0, ParamTableColumns.RNS)}")
         self.drift.setText(f"{self.param_table.get_column_value(0, ParamTableColumns.DRIFT)}")
         self.parent().parent().calculate_means()
-        self.parent().parent().addCellData(self.index)
+        self.parent().parent().addCellData(cell=self.index, name=self.name.text())
 
     def updateUI(self):
         if self.rns.text() is not None and self.drift.text() is not None:

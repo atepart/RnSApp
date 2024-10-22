@@ -20,6 +20,7 @@ class Item:
     def __init__(
         self,
         cell: int,
+        name: str,
         diameter_list: List[float],
         rn_sqrt_list: List[float],
         drift: float,
@@ -28,6 +29,7 @@ class Item:
         initial_data: List[InitialDataItem],
     ):
         self.cell = cell
+        self.name = name
         self.diameter = diameter_list
         self.rn_sqrt = rn_sqrt_list
         self.drift = drift

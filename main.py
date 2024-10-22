@@ -266,9 +266,10 @@ class Window(QtWidgets.QWidget):
                 symbolBrush=pen2.color(),
             )
 
-    def addCellData(self, cell: int):
+    def addCellData(self, cell: int, name: str):
         Store.update_or_create_item(
             cell=cell,
+            name=name,
             diameter_list=self.data_table.get_column_values(DataTableColumns.DIAMETER),
             rn_sqrt_list=self.data_table.get_column_values(DataTableColumns.RN),
             drift=self.param_table.get_column_value(0, ParamTableColumns.DRIFT),
@@ -283,7 +284,7 @@ class Window(QtWidgets.QWidget):
         if not item:
             return
         diameter, rn_sqrt = drop_nans(item.diameter, item.rn_sqrt)
-        self.plot.plot(diameter, rn_sqrt, name=f"№{cell}; Data", symbolSize=4, symbolBrush=color)
+        self.plot.plot(diameter, rn_sqrt, name=f"№{cell}; {item.name}; Data", symbolSize=4, symbolBrush=color)
         diameter_list = diameter.tolist()
         if np.min(diameter_list) > item.drift:
             diameter_list.insert(0, item.drift)
