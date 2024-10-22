@@ -1,11 +1,4 @@
 from PyQt5 import QtWidgets
-from PyQt5 import QtCore
-
-
-class AlignDelegate(QtWidgets.QStyledItemDelegate):
-    def initStyleOption(self, option, index):
-        super(AlignDelegate, self).initStyleOption(option, index)
-        option.displayAlignment = QtCore.Qt.AlignCenter
 
 
 class ReadOnlyDelegate(QtWidgets.QStyledItemDelegate):

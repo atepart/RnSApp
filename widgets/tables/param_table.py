@@ -2,7 +2,8 @@ from PyQt5 import QtWidgets
 
 from constants import ParamTableColumns
 from store import Item
-from widgets.delegates import RoundedDelegate, AlignDelegate
+from widgets.delegates import RoundedDelegate
+from widgets.tables.item import TableWidgetItem
 from widgets.tables.mixins import TableMixin
 
 
@@ -36,8 +37,6 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
 
-        self.setItemDelegate(AlignDelegate(self))
-
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)
 
@@ -50,9 +49,9 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
             )
 
     def load_data(self, data: Item):
-        self.setItem(0, ParamTableColumns.SLOPE.index, QtWidgets.QTableWidgetItem(str(data.slope)))
-        self.setItem(0, ParamTableColumns.INTERCEPT.index, QtWidgets.QTableWidgetItem(str(data.intercept)))
-        self.setItem(0, ParamTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(data.drift)))
-        self.setItem(0, ParamTableColumns.RNS.index, QtWidgets.QTableWidgetItem(str(data.rns)))
-        self.setItem(0, ParamTableColumns.DRIFT_ERROR.index, QtWidgets.QTableWidgetItem(str(data.drift_error)))
-        self.setItem(0, ParamTableColumns.RNS_ERROR.index, QtWidgets.QTableWidgetItem(str(data.rns_error)))
+        self.setItem(0, ParamTableColumns.SLOPE.index, TableWidgetItem(str(data.slope)))
+        self.setItem(0, ParamTableColumns.INTERCEPT.index, TableWidgetItem(str(data.intercept)))
+        self.setItem(0, ParamTableColumns.DRIFT.index, TableWidgetItem(str(data.drift)))
+        self.setItem(0, ParamTableColumns.RNS.index, TableWidgetItem(str(data.rns)))
+        self.setItem(0, ParamTableColumns.DRIFT_ERROR.index, TableWidgetItem(str(data.drift_error)))
+        self.setItem(0, ParamTableColumns.RNS_ERROR.index, TableWidgetItem(str(data.rns_error)))

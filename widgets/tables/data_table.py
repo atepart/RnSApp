@@ -5,7 +5,8 @@ from PyQt5.QtWidgets import QHeaderView
 
 from constants import DataTableColumns
 from store import InitialDataItem
-from widgets.delegates import RoundedDelegate, AlignDelegate
+from widgets.delegates import RoundedDelegate
+from widgets.tables.item import TableWidgetItem
 from widgets.tables.mixins import TableMixin
 
 
@@ -16,10 +17,10 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         # Set Table headers
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
         self.setColumnWidth(DataTableColumns.NUMBER.index, 30)
-        self.setColumnWidth(DataTableColumns.NAME.index, 170)
-        self.setColumnWidth(DataTableColumns.RESISTANCE.index, 170)
-        self.setColumnWidth(DataTableColumns.RNS.index, 120)
-        self.setColumnWidth(DataTableColumns.RN_SQRT.index, 120)
+        self.setColumnWidth(DataTableColumns.NAME.index, 160)
+        self.setColumnWidth(DataTableColumns.RESISTANCE.index, 160)
+        self.setColumnWidth(DataTableColumns.RNS.index, 100)
+        self.setColumnWidth(DataTableColumns.RN_SQRT.index, 100)
         header = self.horizontalHeader()
         header.setSectionResizeMode(DataTableColumns.DIAMETER.index, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
@@ -34,8 +35,6 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
         # Set default Numbers
         self.set_default_numbers()
-
-        self.setItemDelegate(AlignDelegate(self))
 
         # Set columns RnS, Rn, Drift, Square as read-only
         self.set_read_only_columns(
@@ -57,7 +56,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(
                 i,
                 DataTableColumns.NUMBER.index,
-                QtWidgets.QTableWidgetItem(str(i + 1)),
+                TableWidgetItem(str(i + 1)),
             )
 
     def keyPressEvent(self, event):
@@ -79,7 +78,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                         DataTableColumns.DRIFT.index,
                         DataTableColumns.SQUARE.index,
                     ]:  # Нельзя изменить Rn, RnS, Drift
-                        self.setItem(item.row(), item.column(), QtWidgets.QTableWidgetItem(""))
+                        self.setItem(item.row(), item.column(), TableWidgetItem(""))
 
         # Ивент вставки ctrl-v
         elif event.matches(QtGui.QKeySequence.Paste):
@@ -109,7 +108,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                     DataTableColumns.RESISTANCE.index,
                 ]:  # Для данных колонок нужны числа float
                     value = value.replace(",", ".")
-                item = QtWidgets.QTableWidgetItem(value)
+                item = TableWidgetItem(value)
                 self.setItem(start_row + i, start_col + j, item)
 
     def get_column_values(self, column: DataTableColumns):
@@ -153,9 +152,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(
                 row,
                 DataTableColumns.NUMBER.index,
-                QtWidgets.QTableWidgetItem(str(row + 1)),
+                TableWidgetItem(str(row + 1)),
             )  # Clear Number column
-            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
+            self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))  # Clear Square
 
     def clear_rn(self):
         for row in range(self.rowCount()):
@@ -214,4 +213,4 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
     def load_data(self, data: List[InitialDataItem]):
         for item in data:
-            self.setItem(item["row"], item["col"], QtWidgets.QTableWidgetItem(f"{item['value']}"))
+            self.setItem(item["row"], item["col"], TableWidgetItem(f"{item['value']}"))

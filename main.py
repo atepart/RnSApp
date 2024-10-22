@@ -21,6 +21,7 @@ from utils import (
     calculate_square,
 )
 from widgets.cell import CellWidget
+from widgets.tables.item import TableWidgetItem
 from widgets.tables.data_table import DataTable
 from widgets.tables.param_table import ParamTable
 
@@ -152,7 +153,7 @@ class Window(QtWidgets.QWidget):
             if not resistance or not diameter:
                 continue
             rn_sqrt = calculate_rn_sqrt(resistance)
-            self.data_table.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(str(rn_sqrt)))
+            self.data_table.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(str(rn_sqrt)))
 
     def calculate_main_params(self):
         """Расчет Наклона, Пересечения, RnS, Ухода в целом"""
@@ -167,12 +168,12 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.SLOPE.index,
-            QtWidgets.QTableWidgetItem(str(slope)),
+            TableWidgetItem(str(slope)),
         )
         self.param_table.setItem(
             0,
             ParamTableColumns.INTERCEPT.index,
-            QtWidgets.QTableWidgetItem(str(intercept)),
+            TableWidgetItem(str(intercept)),
         )
 
         drift = -intercept / slope
@@ -180,14 +181,14 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.DRIFT.index,
-            QtWidgets.QTableWidgetItem(str(drift)),
+            TableWidgetItem(str(drift)),
         )
 
         rns = calculate_rns(slope)
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS.index,
-            QtWidgets.QTableWidgetItem(str(rns)),
+            TableWidgetItem(str(rns)),
         )
 
     def calculate_error_params(self):
@@ -197,7 +198,7 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS_ERROR.index,
-            QtWidgets.QTableWidgetItem(str(rns_error)),
+            TableWidgetItem(str(rns_error)),
         )
 
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
@@ -206,7 +207,7 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.DRIFT_ERROR.index,
-            QtWidgets.QTableWidgetItem(str(drift_error)),
+            TableWidgetItem(str(drift_error)),
         )
 
     def calculate_rns_drift_square_per_sample(self):
@@ -229,14 +230,14 @@ class Window(QtWidgets.QWidget):
             self.data_table.setItem(
                 row,
                 DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(str(rns_value)),
+                TableWidgetItem(str(rns_value)),
             )
 
             drift_value = calculate_drift(diameter=diameter, resistance=resistance, rns=rns_mean)
-            self.data_table.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(drift_value)))
+            self.data_table.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(str(drift_value)))
 
             square_value = calculate_square(diameter=diameter, drift=drift_value)
-            self.data_table.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(str(square_value)))
+            self.data_table.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(str(square_value)))
 
     def calculate_results(self):
         self.data_table.clear_calculations()
@@ -525,14 +526,20 @@ class Window(QtWidgets.QWidget):
         is_some_errors = False
         try:
             wb = openpyxl.load_workbook(fileName)
+            data_sheet_names = [sh for sh in wb.sheetnames if sh.startswith("Data №")]
+            if not len(data_sheet_names):
+                QtWidgets.QMessageBox.critical(
+                    self, "Ошибка чтения", "Не найдены данные с нумерацией для записанных ячеек"
+                )
+                return
             sheet_names = "\n".join(wb.sheetnames)
-            count = (len(wb.sheetnames) - 1) // 2 + 1
-            for i in range(1, count):
+            for sheet_name in data_sheet_names:
                 try:
-                    data_name = re.findall(f"(Data №{i} .*)", sheet_names)[0]
+                    i = int(re.findall(r"Data №(\d+) .*", sheet_name)[0])
+                    data_name = re.findall(f"(Data №{i} .*)", sheet_name)[0]
                     result_name = re.findall(f"(Results №{i} .*)", sheet_names)[0]
-                    cell_name = re.findall(f"Data №{i} (.*)", data_name)[0]
-                except IndexError:
+                    cell_name = re.findall(f"Data №{i} (.*)", sheet_name)[0]
+                except (IndexError, ValueError):
                     is_some_errors = True
                     continue
 
