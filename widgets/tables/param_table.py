@@ -1,6 +1,8 @@
 from PyQt5 import QtWidgets
 
 from constants import ParamTableColumns
+from store import Item
+from widgets.delegates import RoundedDelegate
 from widgets.tables.mixins import TableMixin
 
 
@@ -27,6 +29,13 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
             ]
         )
 
+        self.setItemDelegateForColumn(ParamTableColumns.SLOPE.index, RoundedDelegate(rounded=4, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.INTERCEPT.index, RoundedDelegate(rounded=4, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.DRIFT.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.RNS.index, RoundedDelegate(rounded=1, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
+
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)
 
@@ -37,3 +46,11 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
                 col,
                 QtWidgets.QTableWidgetItem(""),
             )
+
+    def load_data(self, data: Item):
+        self.setItem(0, ParamTableColumns.SLOPE.index, QtWidgets.QTableWidgetItem(str(data.slope)))
+        self.setItem(0, ParamTableColumns.INTERCEPT.index, QtWidgets.QTableWidgetItem(str(data.intercept)))
+        self.setItem(0, ParamTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(data.drift)))
+        self.setItem(0, ParamTableColumns.RNS.index, QtWidgets.QTableWidgetItem(str(data.rns)))
+        self.setItem(0, ParamTableColumns.DRIFT_ERROR.index, QtWidgets.QTableWidgetItem(str(data.drift_error)))
+        self.setItem(0, ParamTableColumns.RNS_ERROR.index, QtWidgets.QTableWidgetItem(str(data.rns_error)))

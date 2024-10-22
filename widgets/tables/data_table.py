@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QHeaderView
 
 from constants import DataTableColumns
 from store import InitialDataItem
+from widgets.delegates import RoundedDelegate
 from widgets.tables.mixins import TableMixin
 
 
@@ -15,14 +16,14 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         # Set Table headers
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
         self.setColumnWidth(DataTableColumns.NUMBER.index, 30)
+        self.setColumnWidth(DataTableColumns.NAME.index, 120)
+        self.setColumnWidth(DataTableColumns.RESISTANCE.index, 120)
+        self.setColumnWidth(DataTableColumns.RNS.index, 100)
+        self.setColumnWidth(DataTableColumns.RN_SQRT.index, 100)
         header = self.horizontalHeader()
-        for col in DataTableColumns:
-            if col == DataTableColumns.NUMBER:
-                continue
-            if col == DataTableColumns.NAME:
-                header.setSectionResizeMode(col.index, QHeaderView.Stretch)
-                continue
-            header.setSectionResizeMode(col.index, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(DataTableColumns.DIAMETER.index, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(DataTableColumns.SQUARE.index, QHeaderView.ResizeMode.ResizeToContents)
 
         # Remove vertical Table headers
         self.verticalHeader().setVisible(False)
@@ -38,11 +39,16 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.set_read_only_columns(
             [
                 DataTableColumns.RNS.index,
-                DataTableColumns.RN.index,
+                DataTableColumns.RN_SQRT.index,
                 DataTableColumns.DRIFT.index,
                 DataTableColumns.SQUARE.index,
             ]
         )
+
+        self.setItemDelegateForColumn(DataTableColumns.DRIFT.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(DataTableColumns.RNS.index, RoundedDelegate(rounded=1, parent=self))
+        self.setItemDelegateForColumn(DataTableColumns.SQUARE.index, RoundedDelegate(rounded=2, parent=self))
+        self.setItemDelegateForColumn(DataTableColumns.RN_SQRT.index, RoundedDelegate(rounded=2, parent=self))
 
     def set_default_numbers(self):
         for i in range(self.rowCount()):
@@ -67,7 +73,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 for item in selected_items:
                     if item.column() not in [
                         DataTableColumns.RNS.index,
-                        DataTableColumns.RN.index,
+                        DataTableColumns.RN_SQRT.index,
                         DataTableColumns.DRIFT.index,
                         DataTableColumns.SQUARE.index,
                     ]:  # Нельзя изменить Rn, RnS, Drift
@@ -139,7 +145,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             )  # Clear Resistance column
             self.setItem(
                 row,
-                DataTableColumns.RN.index,
+                DataTableColumns.RN_SQRT.index,
                 QtWidgets.QTableWidgetItem(""),
             )  # Clear Rn^-0.5 column
             self.setItem(
@@ -168,7 +174,26 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             )  # Clear Resistance column
             self.setItem(
                 row,
-                DataTableColumns.RN.index,
+                DataTableColumns.RN_SQRT.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Rn^-0.5 column
+            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
+
+    def clear_calculations(self):
+        for row in range(self.rowCount()):
+            self.setItem(
+                row,
+                DataTableColumns.RNS.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear RnS column
+            self.setItem(
+                row,
+                DataTableColumns.DRIFT.index,
+                QtWidgets.QTableWidgetItem(""),
+            )  # Clear Drift column
+            self.setItem(
+                row,
+                DataTableColumns.RN_SQRT.index,
                 QtWidgets.QTableWidgetItem(""),
             )  # Clear Rn^-0.5 column
             self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square

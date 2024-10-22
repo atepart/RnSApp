@@ -21,20 +21,32 @@ class Item:
         self,
         cell: int,
         name: str,
+        # Исходные данные
         diameter_list: List[float],
         rn_sqrt_list: List[float],
-        drift: float,
+        # Расчетные данные
         slope: float,
         intercept: float,
+        drift: float,
+        rns: float,
+        drift_error: float,
+        rns_error: float,
+        # Исходная таблица
         initial_data: List[InitialDataItem],
     ):
         self.cell = cell
         self.name = name
+
         self.diameter = diameter_list
         self.rn_sqrt = rn_sqrt_list
-        self.drift = drift
+
         self.slope = slope
         self.intercept = intercept
+        self.drift = drift
+        self.rns = rns
+        self.drift_error = drift_error
+        self.rns_error = rns_error
+
         self.initial_data = initial_data
         self.is_plot = False
 
@@ -49,14 +61,29 @@ class ItemsList(list):
 
         return filter(_filter, self)
 
+    def _exclude(self, **kwargs) -> filter:
+        def _exclude(item):
+            for key, value in kwargs.items():
+                if not getattr(item, key, None) != value:
+                    return False
+            return True
+
+        return filter(_exclude, self)
+
     def filter(self, **kwargs) -> "ItemsList":
         return self.__class__(self._filter(**kwargs))
+
+    def exclude(self, **kwargs):
+        return self.__class__(self._exclude(**kwargs))
 
     def get(self, **kwargs) -> Optional["Item"]:
         try:
             return self.filter(**kwargs)[0]
         except IndexError:
             return None
+
+    def exists(self):
+        return len(self)
 
 
 class Store:

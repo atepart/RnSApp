@@ -30,6 +30,7 @@ class Window(QtWidgets.QWidget):
 
         self.setWindowIcon(QIcon("./assets/rns-logo-sm.png"))
         # Таблица с исходными данными
+        self.data_table_label = QtWidgets.QLabel("Таблица с данными", self)
         self.data_table = DataTable(rows=50)
 
         # График
@@ -39,30 +40,34 @@ class Window(QtWidgets.QWidget):
         # Main Layout
         self.layout = QtWidgets.QHBoxLayout()
 
+        # Left Layout (таблица с данными)
+        self.left_layout = QtWidgets.QVBoxLayout()
+
         # Right Layout (таблица с параметрами, график, экшнс)
         self.right_layout = QtWidgets.QVBoxLayout()
 
         # Таблица с параметрами
+        self.param_table_label = QtWidgets.QLabel("Таблица с расчетом", self)
         self.param_table = ParamTable()
 
         # Экшнс кнопки
         self.actions_group = QtWidgets.QGroupBox("Действия")
         self.actions_layout = QtWidgets.QHBoxLayout()
 
-        self.result_button = QtWidgets.QPushButton("Рассчитать")
-        self.result_button.setToolTip("Произвести рассчеты")
+        self.result_button = QtWidgets.QPushButton("Расчитать")
+        self.result_button.setToolTip("Произвести расчеты")
         self.result_button.clicked.connect(self.calculate_results)
 
-        self.clean_rn_button = QtWidgets.QPushButton("Очистить столбец Rn")
-        self.clean_rn_button.setToolTip("Очистить стоблец Rn и рассчетную таблицу")
+        self.clean_rn_button = QtWidgets.QPushButton("Очистить Rn")
+        self.clean_rn_button.setToolTip("Очистить стоблец Rn и таблицу с расчетом")
         self.clean_rn_button.clicked.connect(self.clean_rn)
 
         self.clean_all_button = QtWidgets.QPushButton("Очистить все")
-        self.clean_all_button.setToolTip("Очистить исходную и рассчетную таблицы и график")
+        self.clean_all_button.setToolTip("Очистить график и таблицы с даными и расчетом")
         self.clean_all_button.clicked.connect(self.clean_all)
 
-        self.save_button = QtWidgets.QPushButton("Сохранить все")
-        self.save_button.setToolTip("Сохранить входные данные и рассчет")
+        self.save_button = QtWidgets.QPushButton("Сохранить")
+        self.save_button.setToolTip("Сохранить текущие таблицы с данными и расчетом")
         self.save_button.clicked.connect(self.save_data)
 
         self.actions_layout.addWidget(self.result_button)
@@ -91,14 +96,19 @@ class Window(QtWidgets.QWidget):
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
         self.cell_group.setLayout(self.cell_layout)
 
+        # Добавляем виджеты в левый лейаут
+        self.left_layout.addWidget(self.data_table_label)
+        self.left_layout.addWidget(self.data_table)
+
         # Добавляем все виджеты в правый лейаут
+        self.right_layout.addWidget(self.param_table_label)
         self.right_layout.addWidget(self.param_table)
         self.right_layout.addWidget(self.plot)
         self.right_layout.addWidget(self.actions_group)
         self.right_layout.addWidget(self.cell_group)
 
         # Добавляет виджеты в основной лейаут
-        self.layout.addWidget(self.data_table)
+        self.layout.addLayout(self.left_layout)
         self.layout.addLayout(self.right_layout)
         self.setLayout(self.layout)
 
@@ -112,23 +122,23 @@ class Window(QtWidgets.QWidget):
             if rns:
                 rns_list.append(rns)
 
-        self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 4)}")
-        self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 4)}")
+        self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 3)}")
+        self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 1)}")
 
     def calculate_rn05(self):
-        """Рассчет Rn^-0.5 для каждого образца"""
+        """Расчет Rn^-0.5 для каждого образца"""
         for row in range(self.data_table.rowCount()):
             resistance = self.data_table.get_column_value(row, DataTableColumns.RESISTANCE)
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
             if not resistance or not diameter:
                 continue
             rn_sqrt = calculate_rn_sqrt(resistance)
-            self.data_table.setItem(row, DataTableColumns.RN.index, QtWidgets.QTableWidgetItem(str(round(rn_sqrt, 4))))
+            self.data_table.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(str(rn_sqrt)))
 
     def calculate_main_params(self):
-        """Рассчет Наклона, Пересечения, RnS, Ухода в целом"""
+        """Расчет Наклона, Пересечения, RnS, Ухода в целом"""
         diameter_list = self.data_table.get_column_values(DataTableColumns.DIAMETER)
-        rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN)
+        rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN_SQRT)
         try:
             diameter_list, rn_sqrt_list = drop_nans(diameter_list, rn_sqrt_list)
         except ListsNotSameLength:
@@ -138,12 +148,12 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.SLOPE.index,
-            QtWidgets.QTableWidgetItem(str(round(slope, 4))),
+            QtWidgets.QTableWidgetItem(str(slope)),
         )
         self.param_table.setItem(
             0,
             ParamTableColumns.INTERCEPT.index,
-            QtWidgets.QTableWidgetItem(str(round(intercept, 4))),
+            QtWidgets.QTableWidgetItem(str(intercept)),
         )
 
         drift = -intercept / slope
@@ -151,24 +161,24 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.DRIFT.index,
-            QtWidgets.QTableWidgetItem(str(round(drift, 4))),
+            QtWidgets.QTableWidgetItem(str(drift)),
         )
 
         rns = calculate_rns(slope)
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS.index,
-            QtWidgets.QTableWidgetItem(str(round(rns, 4))),
+            QtWidgets.QTableWidgetItem(str(rns)),
         )
 
     def calculate_error_params(self):
-        """Рассчет ошибок RnS и Ухода"""
+        """Расчет ошибок RnS и Ухода"""
         rns_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.RNS) if v], dtype=float)
         rns_error = np.std(rns_list)
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS_ERROR.index,
-            QtWidgets.QTableWidgetItem(str(round(rns_error, 4))),
+            QtWidgets.QTableWidgetItem(str(rns_error)),
         )
 
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
@@ -177,11 +187,11 @@ class Window(QtWidgets.QWidget):
         self.param_table.setItem(
             0,
             ParamTableColumns.DRIFT_ERROR.index,
-            QtWidgets.QTableWidgetItem(str(round(drift_error, 4))),
+            QtWidgets.QTableWidgetItem(str(drift_error)),
         )
 
     def calculate_rns_drift_square_per_sample(self):
-        """Рассчет RnS, Ухода и Площади для каждого образца по отдельности"""
+        """Расчет RnS, Ухода и Площади для каждого образца по отдельности"""
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         if not drift:
             return
@@ -200,20 +210,17 @@ class Window(QtWidgets.QWidget):
             self.data_table.setItem(
                 row,
                 DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(str(round(rns_value, 4))),
+                QtWidgets.QTableWidgetItem(str(rns_value)),
             )
 
             drift_value = calculate_drift(diameter=diameter, resistance=resistance, rns=rns_mean)
-            self.data_table.setItem(
-                row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(round(drift_value, 4)))
-            )
+            self.data_table.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(drift_value)))
 
             square_value = calculate_square(diameter=diameter, drift=drift_value)
-            self.data_table.setItem(
-                row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(str(round(square_value, 4)))
-            )
+            self.data_table.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(str(square_value)))
 
     def calculate_results(self):
+        self.data_table.clear_calculations()
         self.calculate_rn05()
         self.calculate_main_params()
         self.calculate_rns_drift_square_per_sample()
@@ -222,7 +229,7 @@ class Window(QtWidgets.QWidget):
 
     def plot_current_data(self):
         diameter_list = self.data_table.get_column_values(DataTableColumns.DIAMETER)
-        rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN)
+        rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN_SQRT)
         try:
             diameter_list, rn_sqrt_list = drop_nans(diameter_list, rn_sqrt_list)
             diameter_list, rn_sqrt_list = np.array(
@@ -271,10 +278,13 @@ class Window(QtWidgets.QWidget):
             cell=cell,
             name=name,
             diameter_list=self.data_table.get_column_values(DataTableColumns.DIAMETER),
-            rn_sqrt_list=self.data_table.get_column_values(DataTableColumns.RN),
-            drift=self.param_table.get_column_value(0, ParamTableColumns.DRIFT),
+            rn_sqrt_list=self.data_table.get_column_values(DataTableColumns.RN_SQRT),
             slope=self.param_table.get_column_value(0, ParamTableColumns.SLOPE),
             intercept=self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT),
+            drift=self.param_table.get_column_value(0, ParamTableColumns.DRIFT),
+            rns=self.param_table.get_column_value(0, ParamTableColumns.RNS),
+            drift_error=self.param_table.get_column_value(0, ParamTableColumns.DRIFT_ERROR),
+            rns_error=self.param_table.get_column_value(0, ParamTableColumns.RNS_ERROR),
             initial_data=self.data_table.dump_data(),
         )
 
@@ -284,7 +294,6 @@ class Window(QtWidgets.QWidget):
         if not item:
             return
         diameter, rn_sqrt = drop_nans(item.diameter, item.rn_sqrt)
-        self.plot.plot(diameter, rn_sqrt, name=f"№{cell}; {item.name}; Data", symbolSize=4, symbolBrush=color)
         diameter_list = diameter.tolist()
         if np.min(diameter_list) > item.drift:
             diameter_list.insert(0, item.drift)
@@ -295,15 +304,16 @@ class Window(QtWidgets.QWidget):
         self.plot.plot(
             diameter_list,
             y_appr,
-            name=f"№{cell}; Fit",
+            name=f"{item.name}",
             pen=pen2,
             symbolSize=0,
             symbolBrush=pen2.color(),
         )
 
     def remove_plot(self, cell: int):
+        cell_data = Store.data.get(cell=cell)
         plotItem = self.plot.getPlotItem()
-        items_to_remove = [item for item in plotItem.items if item.name().startswith(f"№{cell};")]
+        items_to_remove = [item for item in plotItem.items if item.name() == cell_data.name]
         for item in items_to_remove:
             plotItem.removeItem(item)
 
@@ -384,7 +394,7 @@ class Window(QtWidgets.QWidget):
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Cell Data"
+        ws.title = "Cells data"
 
         init_data = [self.parse_cell(cell) for cell in self.cell_widgets]
         output = []
@@ -414,6 +424,14 @@ class Window(QtWidgets.QWidget):
         if not file_name.endswith(".xlsx"):
             file_name += ".xlsx"
         wb.save(filename=file_name)
+
+    def reload_tables_from_cell_data(self, cell: int):
+        cell_data = Store.data.get(cell=cell)
+        if not cell_data:
+            return
+        self.data_table.load_data(data=cell_data.initial_data)
+        self.param_table.load_data(data=cell_data)
+        self.plot_current_data()
 
 
 if __name__ == "__main__":

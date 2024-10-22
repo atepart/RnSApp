@@ -1,6 +1,7 @@
 from PyQt5 import QtWidgets, QtCore
 
 from constants import ParamTableColumns
+from store import Store
 
 
 class CellWidget(QtWidgets.QGroupBox):
@@ -40,11 +41,6 @@ class CellWidget(QtWidgets.QGroupBox):
         self.writeButton.clicked.connect(self.openWriteDialog)
         layout.addWidget(self.writeButton)
 
-        self.rewriteButton = QtWidgets.QPushButton("Переписать данные")
-        self.rewriteButton.clicked.connect(self.openRewriteDataDialog)
-        layout.addWidget(self.rewriteButton)
-        self.rewriteButton.setVisible(False)
-
         self.checkbox = QtWidgets.QCheckBox("Построить")
         self.checkbox.setVisible(False)
         self.checkbox.stateChanged.connect(self.buildGraph)
@@ -53,15 +49,20 @@ class CellWidget(QtWidgets.QGroupBox):
         self.setLayout(layout)
 
     def openWriteDialog(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, "Запись", "Введите новое имя:")
+        name, ok = QtWidgets.QInputDialog.getText(self, "Запись", "Введите уникальное имя:")
         if ok and name:
+            if Store.data.exclude(cell=self.index).filter(name=name).exists():
+                QtWidgets.QMessageBox.warning(
+                    self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя."
+                )
+                return
             self.name.setText(name)
             self.writeData()
             self.updateUI()
 
     def writeData(self):
-        self.rns.setText(f"{self.param_table.get_column_value(0, ParamTableColumns.RNS)}")
-        self.drift.setText(f"{self.param_table.get_column_value(0, ParamTableColumns.DRIFT)}")
+        self.rns.setText(f"{round(self.param_table.get_column_value(0, ParamTableColumns.RNS), 1)}")
+        self.drift.setText(f"{round(self.param_table.get_column_value(0, ParamTableColumns.DRIFT), 3)}")
         self.parent().parent().calculate_means()
         self.parent().parent().addCellData(cell=self.index, name=self.name.text())
 
@@ -84,7 +85,15 @@ class CellWidget(QtWidgets.QGroupBox):
         # Логика для открытия окна для переименования
         name, ok = QtWidgets.QInputDialog.getText(self, "Переименование", "Введите новое имя:")
         if name and ok:
+            if Store.data.exclude(cell=self.index).filter(name=name).exists():
+                QtWidgets.QMessageBox.warning(
+                    self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя."
+                )
+                return
             self.name.setText(name)
+            self.parent().parent().remove_plot(cell=self.index)
+            Store.update_or_create_item(cell=self.index, name=name)
+            self.parent().parent().plot_data(cell=self.index)
 
     def openRewriteDataDialog(self):
         # Логика для открытия окна для перезаписи
@@ -108,8 +117,24 @@ class CellWidget(QtWidgets.QGroupBox):
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             self.writeData()
 
+    def showData(self):
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Показать данные",
+            "Текущиее таблицы с данными и рассчетом будет перезаписаны, продолжить?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+
+        if reply == QtWidgets.QMessageBox.Yes:
+            self.parent().parent().reload_tables_from_cell_data(cell=self.index)
+
     def showContextMenu(self, position):
         menu = QtWidgets.QMenu(self)
+
+        showAction = QtWidgets.QAction("Показать данные", self)
+        showAction.triggered.connect(self.showData)
+        menu.addAction(showAction)
 
         renameAction = QtWidgets.QAction("Переименовать", self)
         renameAction.triggered.connect(self.openRenameDialog)
