@@ -52,12 +52,12 @@ class Window(QtWidgets.QWidget):
         self.result_button.setToolTip("Произвести рассчеты")
         self.result_button.clicked.connect(self.calculate_results)
 
-        self.clean_rn_button = QtWidgets.QPushButton("Очистить Rn")
-        self.clean_rn_button.setToolTip("Очистить Rn")
+        self.clean_rn_button = QtWidgets.QPushButton("Очистить столбец Rn")
+        self.clean_rn_button.setToolTip("Очистить стоблец Rn и рассчетную таблицу")
         self.clean_rn_button.clicked.connect(self.clean_rn)
 
         self.clean_all_button = QtWidgets.QPushButton("Очистить все")
-        self.clean_all_button.setToolTip("Очистить все данные")
+        self.clean_all_button.setToolTip("Очистить исходную и рассчетную таблицы и график")
         self.clean_all_button.clicked.connect(self.clean_all)
 
         self.save_button = QtWidgets.QPushButton("Сохранить все")
@@ -85,7 +85,7 @@ class Window(QtWidgets.QWidget):
         self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
         self.cell_layout.addWidget(self.mean_rns, 4, 1)
         self.cell_save_button = QtWidgets.QPushButton("Сохранить ячейки")
-        self.cell_save_button.setToolTip("Сохранить выходную таблицу с RnS")
+        self.cell_save_button.setToolTip("Сохранить записанные ячейки с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
         self.cell_layout.addWidget(self.cell_save_button, 4, 3)
         self.cell_group.setLayout(self.cell_layout)
@@ -93,8 +93,8 @@ class Window(QtWidgets.QWidget):
         # Добавляем все виджеты в правый лейаут
         self.right_layout.addWidget(self.param_table)
         self.right_layout.addWidget(self.plot)
-        self.right_layout.addWidget(self.cell_group)
         self.right_layout.addWidget(self.actions_group)
+        self.right_layout.addWidget(self.cell_group)
 
         # Добавляет виджеты в основной лейаут
         self.layout.addWidget(self.data_table)
@@ -185,6 +185,10 @@ class Window(QtWidgets.QWidget):
         if not drift:
             return
 
+        rns_mean = self.param_table.get_column_value(0, ParamTableColumns.RNS)
+        if not rns_mean:
+            return
+
         for row in range(self.data_table.rowCount()):
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
             resistance = self.data_table.get_column_value(row, DataTableColumns.RESISTANCE)
@@ -197,7 +201,8 @@ class Window(QtWidgets.QWidget):
                 DataTableColumns.RNS.index,
                 QtWidgets.QTableWidgetItem(str(round(rns_value, 4))),
             )
-            drift_value = calculate_drift(diameter=diameter, resistance=resistance, rns=rns_value)
+
+            drift_value = calculate_drift(diameter=diameter, resistance=resistance, rns=rns_mean)
             self.data_table.setItem(
                 row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(str(round(drift_value, 4)))
             )
