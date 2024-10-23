@@ -64,18 +64,13 @@ class Window(QtWidgets.QWidget):
         self.clean_rn_button.setToolTip("Очистить стоблец Rn и таблицу с расчетом")
         self.clean_rn_button.clicked.connect(self.clean_rn)
 
-        self.clean_all_button = QtWidgets.QPushButton("Очистить все")
+        self.clean_all_button = QtWidgets.QPushButton("Очистить таблицы")
         self.clean_all_button.setToolTip("Очистить график и таблицы с даными и расчетом")
         self.clean_all_button.clicked.connect(self.clean_all)
-
-        self.save_button = QtWidgets.QPushButton("Сохранить")
-        self.save_button.setToolTip("Сохранить текущие таблицы с данными и расчетом")
-        self.save_button.clicked.connect(self.save_data)
 
         self.actions_layout.addWidget(self.result_button)
         self.actions_layout.addWidget(self.clean_rn_button)
         self.actions_layout.addWidget(self.clean_all_button)
-        self.actions_layout.addWidget(self.save_button)
         self.actions_group.setLayout(self.actions_layout)
 
         # Грид с ячейками
@@ -309,7 +304,7 @@ class Window(QtWidgets.QWidget):
         )
 
     def plot_data(self, cell: int):
-        color = PLOT_COLORS[cell]
+        color = PLOT_COLORS[cell - 1]
         item = Store.data.get(cell=cell)
         if not item:
             return
@@ -346,43 +341,6 @@ class Window(QtWidgets.QWidget):
         self.plot.setLabel("bottom", x_label, **styles)
         self.plot.addLegend()
         self.plot.showGrid(x=True, y=True)
-
-    def save_data(self):
-        options = QtWidgets.QFileDialog.Options()
-        options |= QtWidgets.QFileDialog.DontUseNativeDialog
-        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self,
-            "Save Data",
-            "",
-            "Excel Files (*.xlsx);;All Files (*)",
-            options=options,
-        )
-        if not file_name:
-            return
-        wb = openpyxl.Workbook()
-        ws1 = wb.active
-        ws1.title = "Data"
-        headers = [self.data_table.horizontalHeaderItem(i).text() for i in range(self.data_table.columnCount())]
-        ws1.append(headers)
-        for row in range(self.data_table.rowCount()):
-            data = [
-                self.data_table.item(row, col).text() if self.data_table.item(row, col) else ""
-                for col in range(self.data_table.columnCount())
-            ]
-            ws1.append(data)
-        ws2 = wb.create_sheet("Results")
-        headers = [self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())]
-        ws2.append(headers)
-        for row in range(self.param_table.rowCount()):
-            data = [
-                self.param_table.item(row, col).text() if self.param_table.item(row, col) else ""
-                for col in range(self.param_table.columnCount())
-            ]
-            ws2.append(data)
-
-        if not file_name.endswith(".xlsx"):
-            file_name += ".xlsx"
-        wb.save(filename=file_name)
 
     def clean_rn(self):
         self.data_table.clear_rn()
