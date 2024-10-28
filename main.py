@@ -97,8 +97,8 @@ class Window(QtWidgets.QWidget):
         self.btn_clear_cell_data.setToolTip("Очистить ячейки с записанными данными")
         self.btn_clear_cell_data.clicked.connect(self.clear_cell_data)
 
-        self.cell_save_button = QtWidgets.QPushButton("Сохранить ячейки")
-        self.cell_save_button.setToolTip("Сохранить записанные ячейки с RnS")
+        self.cell_save_button = QtWidgets.QPushButton("Сохранить")
+        self.cell_save_button.setToolTip("Сохранить записанные данные с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
 
         self.cell_h_layout.addWidget(self.mean_drift)
@@ -472,6 +472,10 @@ class Window(QtWidgets.QWidget):
 
         if reply != QtWidgets.QMessageBox.Yes:
             return
+
+        for cell in self.cell_widgets:
+            cell.clear()
+        Store.clear()
 
         options = QtWidgets.QFileDialog.Options()
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(

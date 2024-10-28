@@ -81,10 +81,27 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                         self.setItem(item.row(), item.column(), TableWidgetItem(""))
 
         # Ивент вставки ctrl-v
-        elif event.matches(QtGui.QKeySequence.Paste):
+        elif event.matches(QtGui.QKeySequence.StandardKey.Paste):
             self.paste_data()
+        # Ивент копирования ctrl-c
+        elif event.matches(QtGui.QKeySequence.StandardKey.Copy):
+            self.copy_data()
         else:
             super(DataTable, self).keyPressEvent(event)
+
+    def copy_data(self):
+        clipboard = QtWidgets.QApplication.clipboard()
+        copied_cells = sorted(self.selectedIndexes())
+
+        copy_text = ""
+        max_column = copied_cells[-1].column()
+        for c in copied_cells:
+            copy_text += self.item(c.row(), c.column()).text()
+            if c.column() == max_column:
+                copy_text += "\n"
+            else:
+                copy_text += "\t"
+        clipboard.setText(copy_text)
 
     def paste_data(self):
         clipboard = QtWidgets.QApplication.clipboard()
