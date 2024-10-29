@@ -189,8 +189,9 @@ class Window(QtWidgets.QWidget):
 
     def calculate_error_params(self):
         """Расчет ошибок RnS и Ухода"""
+        rns = self.param_table.get_column_value(0, ParamTableColumns.RNS)
         rns_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.RNS) if v], dtype=float)
-        rns_error = np.std(rns_list)
+        rns_error = np.sqrt(np.sum((rns_list - rns) ** 2) / len(rns_list))
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS_ERROR.index,
