@@ -15,10 +15,11 @@ from utils import (
     linear_fit,
     calculate_rns,
     calculate_rns_per_sample,
-    calculate_drift,
+    calculate_drift_per_sample,
     calculate_rn_sqrt,
     drop_nans,
     calculate_square,
+    calculate_drift,
 )
 from widgets.cell import CellWidget
 from widgets.tables.item import TableWidgetItem
@@ -171,7 +172,7 @@ class Window(QtWidgets.QWidget):
             TableWidgetItem(str(intercept)),
         )
 
-        drift = -intercept / slope
+        drift = calculate_drift(slope=slope, intercept=intercept)
 
         self.param_table.setItem(
             0,
@@ -198,7 +199,7 @@ class Window(QtWidgets.QWidget):
 
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         drift_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.DRIFT) if v], dtype=float)
-        drift_error = np.sqrt(np.sum((drift_list - drift) ** 2))
+        drift_error = np.sqrt(np.sum((drift_list - drift) ** 2) / len(drift_list))
         self.param_table.setItem(
             0,
             ParamTableColumns.DRIFT_ERROR.index,
@@ -228,7 +229,7 @@ class Window(QtWidgets.QWidget):
                 TableWidgetItem(str(rns_value)),
             )
 
-            drift_value = calculate_drift(diameter=diameter, resistance=resistance, rns=rns_mean)
+            drift_value = calculate_drift_per_sample(diameter=diameter, resistance=resistance, rns=rns_mean)
             self.data_table.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(str(drift_value)))
 
             square_value = calculate_square(diameter=diameter, drift=drift_value)
