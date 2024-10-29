@@ -523,10 +523,12 @@ class Window(QtWidgets.QWidget):
                             continue
 
                 diameter_list = [
-                    float(v.value) for v in initial_data.filter(col=DataTableColumns.DIAMETER.index) if v.value
+                    float(v.value) if v.value else None
+                    for v in initial_data.filter(col=DataTableColumns.DIAMETER.index)
                 ]
                 rn_sqrt_list = [
-                    float(v.value) for v in initial_data.filter(col=DataTableColumns.RN_SQRT.index) if v.value
+                    float(v.value) if v.value else None
+                    for v in initial_data.filter(col=DataTableColumns.RN_SQRT.index)
                 ]
 
                 cell_item = Store.update_or_create_item(

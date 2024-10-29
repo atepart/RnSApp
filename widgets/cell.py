@@ -158,6 +158,7 @@ class CellWidget(QtWidgets.QGroupBox):
         self.drift.setText("")
         self.rns.setVisible(False)
         self.drift.setVisible(False)
+        self.checkbox.setChecked(False)
         self.checkbox.setVisible(False)
         self.writeButton.setVisible(True)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
