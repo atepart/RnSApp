@@ -223,6 +223,9 @@ class Window(QtWidgets.QWidget):
             if not resistance or not diameter:
                 continue
 
+            square_value = calculate_square(diameter=diameter, drift=drift)  # подставлям общий уход
+            self.data_table.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(str(square_value)))
+
             rns_value = calculate_rns_per_sample(resistance=resistance, diameter=diameter, drift=drift)
             self.data_table.setItem(
                 row,
@@ -232,9 +235,6 @@ class Window(QtWidgets.QWidget):
 
             drift_value = calculate_drift_per_sample(diameter=diameter, resistance=resistance, rns=rns_mean)
             self.data_table.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(str(drift_value)))
-
-            square_value = calculate_square(diameter=diameter, drift=drift_value)
-            self.data_table.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(str(square_value)))
 
     def calculate_results(self):
         self.data_table.clear_calculations()
