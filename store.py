@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Any
+from typing import List, Any, Optional
 
 
 class BaseList(list):
@@ -91,7 +91,8 @@ class Item:
 
 
 class ItemsList(BaseList):
-    ...
+    def get(self, **kwargs) -> Optional["Item"]:
+        return super().get(**kwargs)
 
 
 class Store:
