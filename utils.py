@@ -4,7 +4,7 @@ from errors import ListsNotSameLength
 
 
 def linear_fit(x, y):
-    """Рассчет линейной аппроксимации"""
+    """Расчет линейной аппроксимации"""
 
     def mean(xs):
         return sum(xs) / len(xs)
@@ -48,29 +48,34 @@ def drop_nans(arr1: list, arr2: list):
     return np.array([arr for arr in np.array([arr1, arr2]).T if all(arr)], dtype=float).T
 
 
-# Рассчетные функции
+# Расчетные функции
 
 
-def calculate_drift(diameter: float, resistance: float, rns: float):
-    """Рассчет ухода для образца"""
+def calculate_drift(slope: float, intercept: float):
+    """Расчет ухода для всех образцов"""
+    return -intercept / slope
+
+
+def calculate_drift_per_sample(diameter: float, resistance: float, rns: float):
+    """Расчет ухода для одного образца"""
     return diameter - np.sqrt((4 * rns / resistance) / np.pi)
 
 
 def calculate_rns(slope: float):
-    """Рассчет RnS для набора образцов"""
+    """Расчет RnS для набора образцов"""
     return np.pi * 0.25 / (slope**2)
 
 
 def calculate_rns_per_sample(resistance: float, diameter: float, drift: float):
-    """Рассчет RnS для одного образца"""
+    """Расчет RnS для одного образца"""
     return resistance * 0.25 * np.pi * (diameter - drift) ** 2
 
 
 def calculate_rn_sqrt(resistance: float):
-    """Рассчет Rn^-0.5"""
+    """Расчет Rn^-0.5"""
     return 1 / np.sqrt(resistance)
 
 
 def calculate_square(diameter: float, drift: float):
-    """Рассчет площади"""
+    """Расчет площади"""
     return (diameter - drift) ** 2 * np.pi / 4
