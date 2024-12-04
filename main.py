@@ -57,7 +57,7 @@ class Window(QtWidgets.QWidget):
         self.actions_group = QtWidgets.QGroupBox("Действия")
         self.actions_layout = QtWidgets.QHBoxLayout()
 
-        self.result_button = QtWidgets.QPushButton("Расчитать")
+        self.result_button = QtWidgets.QPushButton("Расcчитать")
         self.result_button.setToolTip("Произвести расчеты")
         self.result_button.clicked.connect(self.calculate_results)
 
