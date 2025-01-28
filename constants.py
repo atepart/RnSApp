@@ -37,6 +37,7 @@ class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     DIAMETER = ("Диаметр ACAD (μm)", float)
     RESISTANCE = ("Rn (Ω)", float)
     RNS = ("RnS", float)
+    RNS_ERROR = ("Ошибка RnS", float)
     DRIFT = ("Суммарный Уход (μm)", float)
     SQUARE = ("Площадь (μm^2)", float)
     RN_SQRT = ("Rn^-0.5", float)

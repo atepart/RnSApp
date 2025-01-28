@@ -1,3 +1,4 @@
+import logging
 import sys
 import re
 import numpy as np
@@ -27,9 +28,18 @@ from widgets.tables.data_table import DataTable
 from widgets.tables.param_table import ParamTable
 
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+
+
 class Window(QtWidgets.QWidget):
     def __init__(self):
         super(Window, self).__init__()
+        self.setGeometry(100, 100, 1200, 900)
 
         self.setWindowIcon(QIcon("./assets/rns-logo-sm.png"))
         # Таблица с исходными данными
@@ -68,6 +78,8 @@ class Window(QtWidgets.QWidget):
         self.clean_all_button = QtWidgets.QPushButton("Очистить таблицы")
         self.clean_all_button.setToolTip("Очистить график и таблицы с даными и расчетом")
         self.clean_all_button.clicked.connect(self.clean_all)
+
+        # self.
 
         self.actions_layout.addWidget(self.result_button)
         self.actions_layout.addWidget(self.clean_rn_button)
@@ -141,6 +153,10 @@ class Window(QtWidgets.QWidget):
         self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 3)}")
         self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 1)}")
 
+    def clear_means(self):
+        self.mean_drift.setText("Средний уход: --")
+        self.mean_rns.setText("Средний RnS: --")
+
     def calculate_rn05(self):
         """Расчет Rn^-0.5 для каждого образца"""
         for row in range(self.data_table.rowCount()):
@@ -150,6 +166,7 @@ class Window(QtWidgets.QWidget):
                 continue
             rn_sqrt = calculate_rn_sqrt(resistance)
             self.data_table.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(str(rn_sqrt)))
+        return True
 
     def calculate_main_params(self):
         """Расчет Наклона, Пересечения, RnS, Ухода в целом"""
@@ -157,8 +174,13 @@ class Window(QtWidgets.QWidget):
         rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN_SQRT)
         try:
             diameter_list, rn_sqrt_list = drop_nans(diameter_list, rn_sqrt_list)
-        except ListsNotSameLength:
-            return
+        except (ListsNotSameLength, ValueError):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Не корректные данные!",
+                "В таблице данных не корректные данные в Diameter и Rn^0.5",
+            )
+            return False
         slope, intercept = linear_fit(diameter_list, rn_sqrt_list)
 
         self.param_table.setItem(
@@ -186,12 +208,27 @@ class Window(QtWidgets.QWidget):
             ParamTableColumns.RNS.index,
             TableWidgetItem(str(rns)),
         )
+        return True
 
     def calculate_error_params(self):
         """Расчет ошибок RnS и Ухода"""
         rns = self.param_table.get_column_value(0, ParamTableColumns.RNS)
         rns_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.RNS) if v], dtype=float)
-        rns_error = np.sqrt(np.sum((rns_list - rns) ** 2) / len(rns_list))
+
+        for row, rns_value in enumerate(self.data_table.get_column_values(DataTableColumns.RNS)):
+            value = str(np.abs(rns - rns_value)) if rns_value else ""
+            self.data_table.setItem(row, DataTableColumns.RNS_ERROR.index, TableWidgetItem(value))
+
+        try:
+            rns_error = np.sqrt(np.sum((rns_list - rns) ** 2) / len(rns_list))
+        except (ZeroDivisionError,):
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Ошибка в рассчете RNS_ERROR",
+                "Ошибка деления на ноль при расчете RNS_ERROR!",
+            )
+            rns_error = ""
+
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS_ERROR.index,
@@ -206,16 +243,27 @@ class Window(QtWidgets.QWidget):
             ParamTableColumns.DRIFT_ERROR.index,
             TableWidgetItem(str(drift_error)),
         )
+        return True
 
     def calculate_rns_drift_square_per_sample(self):
         """Расчет RnS, Ухода и Площади для каждого образца по отдельности"""
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         if not drift:
-            return
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Не корректные данные!",
+                "Не вычислен уход!",
+            )
+            return False
 
         rns_mean = self.param_table.get_column_value(0, ParamTableColumns.RNS)
         if not rns_mean:
-            return
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Не корректные данные!",
+                "Не вычислен RnS!",
+            )
+            return False
 
         for row in range(self.data_table.rowCount()):
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
@@ -235,13 +283,18 @@ class Window(QtWidgets.QWidget):
 
             drift_value = calculate_drift_per_sample(diameter=diameter, resistance=resistance, rns=rns_mean)
             self.data_table.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(str(drift_value)))
+        return True
 
     def calculate_results(self):
         self.data_table.clear_calculations()
-        self.calculate_rn05()
-        self.calculate_main_params()
-        self.calculate_rns_drift_square_per_sample()
-        self.calculate_error_params()
+        if not self.calculate_rn05():
+            return
+        if not self.calculate_main_params():
+            return
+        if not self.calculate_rns_drift_square_per_sample():
+            return
+        if not self.calculate_error_params():
+            return
         self.plot_current_data()
 
     def plot_current_data(self):
@@ -255,7 +308,7 @@ class Window(QtWidgets.QWidget):
             diameter_list = diameter_list.tolist()
             rn_sqrt_list = rn_sqrt_list.tolist()
         except ListsNotSameLength:
-            return
+            return False
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         slope = self.param_table.get_column_value(0, ParamTableColumns.SLOPE)
         intercept = self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT)
@@ -294,7 +347,13 @@ class Window(QtWidgets.QWidget):
         Store.update_or_create_item(
             cell=cell,
             name=name,
+            # number_list=self.data_table.get_column_values(DataTableColumns.NUMBER),
+            # name_list=self.data_table.get_column_values(DataTableColumns.NAME),
             diameter_list=self.data_table.get_column_values(DataTableColumns.DIAMETER),
+            # resistance_list=self.data_table.get_column_values(DataTableColumns.RESISTANCE),
+            # rns_list=self.data_table.get_column_values(DataTableColumns.RNS),
+            # drift_list=self.data_table.get_column_values(DataTableColumns.DRIFT),
+            # square_list=self.data_table.get_column_values(DataTableColumns.SQUARE),
             rn_sqrt_list=self.data_table.get_column_values(DataTableColumns.RN_SQRT),
             slope=self.param_table.get_column_value(0, ParamTableColumns.SLOPE),
             intercept=self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT),
@@ -310,7 +369,7 @@ class Window(QtWidgets.QWidget):
         item = Store.data.get(cell=cell)
         if not item:
             return
-        diameter, rn_sqrt = drop_nans(item.diameter, item.rn_sqrt)
+        diameter, rn_sqrt = drop_nans(item.diameter_list, item.rn_sqrt_list)
         diameter_list = diameter.tolist()
         if np.min(diameter_list) > item.drift:
             diameter_list.insert(0, item.drift)
@@ -355,8 +414,8 @@ class Window(QtWidgets.QWidget):
 
     @staticmethod
     def parse_cell(cell):
-        drift = float(cell.drift.text()) if cell.drift.text() else ""
-        rns = float(cell.rns.text()) if cell.rns.text() else ""
+        drift = float(cell.drift.text().split("Уход: ")[1]) if cell.drift.text() else ""
+        rns = float(cell.rns.text().split("RnS: ")[1]) if cell.rns.text() else ""
         return [cell.name.text(), drift, rns]
 
     def save_cell_data(self):
@@ -376,7 +435,7 @@ class Window(QtWidgets.QWidget):
         ws_cells = wb.active
         ws_cells.title = "Cells data"
 
-        init_data = [self.parse_cell(cell) for cell in self.cell_widgets]
+        init_data = [[cell.name.text(), cell.drift.text(), cell.rns.text()] for cell in self.cell_widgets]
         output = []
 
         # Разделение исходного массива на блоки по 4 строки
@@ -462,6 +521,7 @@ class Window(QtWidgets.QWidget):
             for cell in self.cell_widgets:
                 cell.clear()
             Store.clear()
+            self.clear_means()
 
     def load_cell_data(self):
         reply = QtWidgets.QMessageBox.question(
@@ -478,6 +538,7 @@ class Window(QtWidgets.QWidget):
         for cell in self.cell_widgets:
             cell.clear()
         Store.clear()
+        self.clear_means()
 
         options = QtWidgets.QFileDialog.Options()
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -488,6 +549,7 @@ class Window(QtWidgets.QWidget):
             return
 
         is_some_errors = False
+        some_errors_text = ""
         try:
             wb = openpyxl.load_workbook(fileName)
             data_sheet_names = [sh for sh in wb.sheetnames if sh.startswith("Data №")]
@@ -511,13 +573,19 @@ class Window(QtWidgets.QWidget):
                 ws_result = wb[result_name]
 
                 initial_data = InitialDataItemList()
-                for row in range(2, ws_data.max_row + 1):
-                    for col in range(0, ws_data.max_column):
+                column_names = [ws_data[1][col].value for col in range(0, ws_data.max_column)]
+                for data_column in DataTableColumns:
+                    col = None
+                    try:
+                        col = column_names.index(data_column.name)
+                    except (ValueError,):
+                        is_some_errors = True
+                        some_errors_text += f"\nКолонка '{data_column.name}' не найдена в таблице '{data_name}';"
+
+                    for row in range(2, ws_data.max_row + 1):
                         try:
-                            value = ws_data[row][col].value
-                            if not value:
-                                value = ""
-                            initial_data.append(InitialDataItem(row=row - 2, col=col, value=value))
+                            value = ws_data[row][col].value if col is not None and ws_data[row][col].value else ""
+                            initial_data.append(InitialDataItem(row=row - 2, col=data_column.index, value=value))
                         except IndexError:
                             is_some_errors = True
                             continue
@@ -547,18 +615,21 @@ class Window(QtWidgets.QWidget):
 
                 cell_widget = self.cell_widgets[cell_item.cell - 1]
                 cell_widget.name.setText(cell_item.name)
-                cell_widget.drift.setText(str(round(cell_item.drift, 3)))
-                cell_widget.rns.setText(str(round(cell_item.rns, 1)))
+                cell_widget.drift.setText(f"Уход: {round(cell_item.drift, 3)}")
+                cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
                 cell_widget.updateUI()
                 self.calculate_means()
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Ошибка чтения", f"Возникли ошибки чтения файла: {str(e)}")
+            logger.exception(f"{e}", exc_info=True)
             return
 
         if is_some_errors:
             QtWidgets.QMessageBox.warning(
-                self, "Файл прочитался с ошибками", "Часть данных могла прочитаться некорректно!"
+                self,
+                "Файл прочитался с ошибками",
+                some_errors_text,
             )
             return
 

@@ -63,8 +63,8 @@ class CellWidget(QtWidgets.QGroupBox):
             self.updateUI()
 
     def writeData(self):
-        self.rns.setText(f"{round(self.param_table.get_column_value(0, ParamTableColumns.RNS), 1)}")
-        self.drift.setText(f"{round(self.param_table.get_column_value(0, ParamTableColumns.DRIFT), 3)}")
+        self.rns.setText(f"RnS: {round(self.param_table.get_column_value(0, ParamTableColumns.RNS), 1)}")
+        self.drift.setText(f"Уход: {round(self.param_table.get_column_value(0, ParamTableColumns.DRIFT), 3)}")
         self.parent().parent().calculate_means()
         self.parent().parent().addCellData(cell=self.index, name=self.name.text())
 

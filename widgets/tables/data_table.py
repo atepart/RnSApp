@@ -51,12 +51,22 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(DataTableColumns.SQUARE.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(DataTableColumns.RN_SQRT.index, RoundedDelegate(rounded=2, parent=self))
 
+        # hide columns DRIFT, RnS Error
+        self.setColumnHidden(DataTableColumns.DRIFT.index, True)
+        self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
+
     def set_default_numbers(self):
         for i in range(self.rowCount()):
+            item = TableWidgetItem(str(i + 1))
+            # item.setFlags(
+            #     QtCore.Qt.ItemFlag.ItemIsUserCheckable |
+            #     QtCore.Qt.ItemFlag.ItemIsEnabled
+            # )
+            # item.setCheckState(QtCore.Qt.CheckState.Checked)
             self.setItem(
                 i,
                 DataTableColumns.NUMBER.index,
-                TableWidgetItem(str(i + 1)),
+                item,
             )
 
     def keyPressEvent(self, event):
