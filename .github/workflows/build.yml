@@ -40,13 +40,13 @@ jobs:
 
     - name: Archive Release Asset
       if: runner.os == 'Windows'
-      run: Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}.zip
+      run: Compress-Archive -Path ./dist/RnSApp -DestinationPath ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}_${{ github.ref_name }}.zip
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: RnSApp_${{ runner.os }}_${{ matrix.arch }}
-        path: ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}.zip
+        name: RnSApp_${{ runner.os }}_${{ matrix.arch }}_${{ github.ref_name }}
+        path: ./dist/RnSApp_${{ runner.os }}_${{ matrix.arch }}_${{ github.ref_name }}.zip
 
   release:
     needs: build
@@ -59,7 +59,7 @@ jobs:
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
-        name: RnSApp_Windows_x86
+        name: RnSApp_Windows_x86_${{ github.ref_name }}
 
     - name: List contents
       run: ls -l .
@@ -69,4 +69,4 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: RnSApp_Windows_x86.zip
+        files: RnSApp_Windows_x86_${{ github.ref_name }}.zip
