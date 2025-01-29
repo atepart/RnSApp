@@ -10,9 +10,10 @@ class TableColumnsMeta(EnumMeta):
 
 
 class TableColumns(Enum, metaclass=TableColumnsMeta):
-    def __init__(self, name, dtype):
+    def __init__(self, name, dtype, slug=None):
         self._name = name
         self._dtype = dtype
+        self._slug = slug
 
     @property
     def name(self):
@@ -26,14 +27,25 @@ class TableColumns(Enum, metaclass=TableColumnsMeta):
     def index(self):
         return self._index
 
+    @property
+    def slug(self):
+        return self._slug
+
     @classmethod
     def get_all_names(cls):
         return [member.name for member in cls]
+
+    @classmethod
+    def get_by_index(cls, index: int):
+        for i, item in enumerate(cls):
+            if i == index:
+                return item
 
 
 class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     NUMBER = ("№", int)
     NAME = ("Имя", str)
+    SELECT = ("✓", bool)
     DIAMETER = ("Диаметр ACAD (μm)", float)
     RESISTANCE = ("Rn (Ω)", float)
     RNS = ("RnS", float)
@@ -50,6 +62,11 @@ class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
     RNS = ("RnS", float)
     DRIFT_ERROR = ("Ошибка ухода", float)
     RNS_ERROR = ("Ошибка RnS", float)
+
+
+class MetaTableColumns(TableColumns, metaclass=TableColumnsMeta):
+    RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
+    ALLOWED_ERROR = ("Разрешенная ошибка", float, "allowed_error")
 
 
 PLOT_COLORS = [
@@ -70,3 +87,8 @@ PLOT_COLORS = [
     "#05FFA2",  # Ярко-аквамариновый
     "#FF5B2E",  # Ярко-рыже-красный
 ]
+
+
+RNS_ERROR_COLOR = "#F56B6B"
+WHITE = "#FFFFFF"
+BLACK = "#000000"

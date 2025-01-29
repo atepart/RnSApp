@@ -1,6 +1,7 @@
 from typing import List
 
 from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QHeaderView
 
 from constants import DataTableColumns
@@ -17,6 +18,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         # Set Table headers
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
         self.setColumnWidth(DataTableColumns.NUMBER.index, 30)
+        self.setColumnWidth(DataTableColumns.SELECT.index, 30)
         self.setColumnWidth(DataTableColumns.NAME.index, 160)
         self.setColumnWidth(DataTableColumns.RESISTANCE.index, 160)
         self.setColumnWidth(DataTableColumns.RNS.index, 100)
@@ -35,6 +37,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
         # Set default Numbers
         self.set_default_numbers()
+        self.set_default_checks()
 
         # Set columns RnS, Rn, Drift, Square as read-only
         self.set_read_only_columns(
@@ -58,16 +61,17 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
     def set_default_numbers(self):
         for i in range(self.rowCount()):
             item = TableWidgetItem(str(i + 1))
-            # item.setFlags(
-            #     QtCore.Qt.ItemFlag.ItemIsUserCheckable |
-            #     QtCore.Qt.ItemFlag.ItemIsEnabled
-            # )
-            # item.setCheckState(QtCore.Qt.CheckState.Checked)
             self.setItem(
                 i,
                 DataTableColumns.NUMBER.index,
                 item,
             )
+
+    def set_default_checks(self):
+        for i in range(self.rowCount()):
+            checkbox = QtWidgets.QCheckBox()
+            checkbox.setChecked(True)
+            self.setCellWidget(i, DataTableColumns.SELECT.index, checkbox)
 
     def keyPressEvent(self, event):
         # На нажатие Enter/Return переход на следующую строку
@@ -139,9 +143,20 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 self.setItem(start_row + i, start_col + j, item)
 
     def get_column_values(self, column: DataTableColumns):
-        return super().get_column_values(column)
+        values = []
+        for row in range(self.rowCount()):
+            if not self.cellWidget(row, DataTableColumns.SELECT.index).isChecked():
+                continue
+            value = self.item(row, column.index)
+            try:
+                values.append(column.dtype(value.text()))
+            except (ValueError, AttributeError):
+                values.append("")
+        return values
 
     def get_column_value(self, row: int, column: DataTableColumns):
+        if not self.cellWidget(row, DataTableColumns.SELECT.index).isChecked():
+            return None
         return super().get_column_value(row, column)
 
     def clear_all(self):
@@ -181,6 +196,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 DataTableColumns.NUMBER.index,
                 TableWidgetItem(str(row + 1)),
             )  # Clear Number column
+            checkbox = QtWidgets.QCheckBox()
+            checkbox.setChecked(True)
+            self.setCellWidget(row, DataTableColumns.SELECT.index, checkbox)
             self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))  # Clear Square
 
     def clear_rn(self):
@@ -226,18 +244,33 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             )  # Clear Rn^-0.5 column
             self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
 
+    def color_row(self, row, background_color, text_color):
+        for col in range(self.columnCount()):
+            item = self.item(row, col)
+            if item:
+                item.setBackground(QBrush(QColor(background_color)))
+                item.setForeground(QBrush(QColor(text_color)))
+
     def dump_data(self):
         data = []
         for row in range(self.rowCount()):
             for col in range(self.columnCount()):
-                item = self.item(row, col)
-                if not item:
-                    item = ""
+
+                if col == DataTableColumns.SELECT.index:
+                    cell_widget = self.cellWidget(row, col)
+                    value = "True" if cell_widget.isChecked() else ""
                 else:
-                    item = item.text()
-                data.append(InitialDataItem(value=item, row=row, col=col))
+                    item = self.item(row, col)
+                    value = DataTableColumns.get_by_index(col).dtype(item.text()) if item.text() else ""
+
+                data.append(InitialDataItem(value=value, row=row, col=col))
         return data
 
     def load_data(self, data: List[InitialDataItem]):
         for item in data:
-            self.setItem(item["row"], item["col"], TableWidgetItem(f"{item['value']}"))
+            if item["col"] == DataTableColumns.SELECT.index:
+                checkbox = QtWidgets.QCheckBox()
+                checkbox.setChecked(item["value"] == "True")
+                self.setCellWidget(item["row"], DataTableColumns.SELECT.index, checkbox)
+            else:
+                self.setItem(item["row"], item["col"], TableWidgetItem(f"{item['value']}"))

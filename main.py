@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PyQt5.QtGui import QIcon
 from openpyxl.styles import Side, Border, Font, Alignment
 
-from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS
+from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS, MetaTableColumns, RNS_ERROR_COLOR, WHITE, BLACK
 from errors import ListsNotSameLength
 from store import Store, InitialDataItem, InitialDataItemList
 from utils import (
@@ -21,6 +21,8 @@ from utils import (
     drop_nans,
     calculate_square,
     calculate_drift,
+    calculate_rns_error_per_sample,
+    calculate_rns_error_diff,
 )
 from widgets.cell import CellWidget
 from widgets.tables.item import TableWidgetItem
@@ -59,6 +61,9 @@ class Window(QtWidgets.QWidget):
         # Right Layout (таблица с параметрами, график, экшнс)
         self.right_layout = QtWidgets.QVBoxLayout()
 
+        # Right layout параметры расчета
+        self.actions_params_layout = QtWidgets.QHBoxLayout()
+
         # Таблица с параметрами
         self.param_table_label = QtWidgets.QLabel("Таблица с расчетом", self)
         self.param_table = ParamTable()
@@ -79,12 +84,30 @@ class Window(QtWidgets.QWidget):
         self.clean_all_button.setToolTip("Очистить график и таблицы с даными и расчетом")
         self.clean_all_button.clicked.connect(self.clean_all)
 
-        # self.
-
         self.actions_layout.addWidget(self.result_button)
         self.actions_layout.addWidget(self.clean_rn_button)
         self.actions_layout.addWidget(self.clean_all_button)
         self.actions_group.setLayout(self.actions_layout)
+
+        # Параметры для расчета
+
+        self.rn_consistent_group = QtWidgets.QGroupBox("Последовательное Rn (Ом)")
+        self.rn_consistent_layout = QtWidgets.QHBoxLayout()
+        self.rn_consistent = QtWidgets.QDoubleSpinBox(self)
+        self.rn_consistent.setRange(0, 100)
+        self.rn_consistent.setDecimals(2)
+        self.rn_consistent.setValue(0)
+        self.rn_consistent_layout.addWidget(self.rn_consistent)
+        self.rn_consistent_group.setLayout(self.rn_consistent_layout)
+
+        self.allowed_error_group = QtWidgets.QGroupBox("Разрешенная ошибка")
+        self.allowed_error_layout = QtWidgets.QHBoxLayout()
+        self.allowed_error = QtWidgets.QDoubleSpinBox(self)
+        self.allowed_error.setRange(0, 1)
+        self.allowed_error.setDecimals(2)
+        self.allowed_error.setValue(0)
+        self.allowed_error_layout.addWidget(self.allowed_error)
+        self.allowed_error_group.setLayout(self.allowed_error_layout)
 
         # Грид с ячейками
         self.cell_group = QtWidgets.QGroupBox("Запись")
@@ -132,7 +155,10 @@ class Window(QtWidgets.QWidget):
         self.right_layout.addWidget(self.param_table_label)
         self.right_layout.addWidget(self.param_table)
         self.right_layout.addWidget(self.plot)
-        self.right_layout.addWidget(self.actions_group)
+        self.actions_params_layout.addWidget(self.actions_group)
+        self.actions_params_layout.addWidget(self.rn_consistent_group)
+        self.actions_params_layout.addWidget(self.allowed_error_group)
+        self.right_layout.addLayout(self.actions_params_layout)
         self.right_layout.addWidget(self.cell_group)
 
         # Добавляет виджеты в основной лейаут
@@ -164,7 +190,7 @@ class Window(QtWidgets.QWidget):
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
             if not resistance or not diameter:
                 continue
-            rn_sqrt = calculate_rn_sqrt(resistance)
+            rn_sqrt = calculate_rn_sqrt(resistance=resistance, rn_consistent=self.rn_consistent.value())
             self.data_table.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(str(rn_sqrt)))
         return True
 
@@ -178,7 +204,7 @@ class Window(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(
                 self,
                 "Не корректные данные!",
-                "В таблице данных не корректные данные в Diameter и Rn^0.5",
+                "В таблице данных не корректные значения для 'Диаметр ACAD' и 'Rn^-0.5'",
             )
             return False
         slope, intercept = linear_fit(diameter_list, rn_sqrt_list)
@@ -215,10 +241,6 @@ class Window(QtWidgets.QWidget):
         rns = self.param_table.get_column_value(0, ParamTableColumns.RNS)
         rns_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.RNS) if v], dtype=float)
 
-        for row, rns_value in enumerate(self.data_table.get_column_values(DataTableColumns.RNS)):
-            value = str(np.abs(rns - rns_value)) if rns_value else ""
-            self.data_table.setItem(row, DataTableColumns.RNS_ERROR.index, TableWidgetItem(value))
-
         try:
             rns_error = np.sqrt(np.sum((rns_list - rns) ** 2) / len(rns_list))
         except (ZeroDivisionError,):
@@ -227,13 +249,27 @@ class Window(QtWidgets.QWidget):
                 "Ошибка в рассчете RNS_ERROR",
                 "Ошибка деления на ноль при расчете RNS_ERROR!",
             )
-            rns_error = ""
+            return False
 
         self.param_table.setItem(
             0,
             ParamTableColumns.RNS_ERROR.index,
             TableWidgetItem(str(rns_error)),
         )
+
+        for row in range(self.data_table.columnCount()):
+            rns_value = self.data_table.get_column_value(row, DataTableColumns.RNS)
+            if not rns_value:
+                continue
+            value = calculate_rns_error_per_sample(rns_i=rns_value, rns=rns)
+            self.data_table.setItem(row, DataTableColumns.RNS_ERROR.index, TableWidgetItem(str(value)))
+            error_diff = calculate_rns_error_diff(
+                rns_error_per_sample=value, rns_error=rns_error, allowed_error=self.allowed_error.value()
+            )
+            if error_diff > 0:
+                self.data_table.color_row(row=row, background_color=RNS_ERROR_COLOR, text_color=WHITE)
+            else:
+                self.data_table.color_row(row=row, background_color=WHITE, text_color=BLACK)
 
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         drift_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.DRIFT) if v], dtype=float)
@@ -274,14 +310,18 @@ class Window(QtWidgets.QWidget):
             square_value = calculate_square(diameter=diameter, drift=drift)  # подставлям общий уход
             self.data_table.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(str(square_value)))
 
-            rns_value = calculate_rns_per_sample(resistance=resistance, diameter=diameter, drift=drift)
+            rns_value = calculate_rns_per_sample(
+                resistance=resistance, diameter=diameter, drift=drift, rn_persistent=self.rn_consistent.value()
+            )
             self.data_table.setItem(
                 row,
                 DataTableColumns.RNS.index,
                 TableWidgetItem(str(rns_value)),
             )
 
-            drift_value = calculate_drift_per_sample(diameter=diameter, resistance=resistance, rns=rns_mean)
+            drift_value = calculate_drift_per_sample(
+                diameter=diameter, resistance=resistance, rns=rns_mean, rn_persistent=self.rn_consistent.value()
+            )
             self.data_table.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(str(drift_value)))
         return True
 
@@ -307,7 +347,7 @@ class Window(QtWidgets.QWidget):
             ).T
             diameter_list = diameter_list.tolist()
             rn_sqrt_list = rn_sqrt_list.tolist()
-        except ListsNotSameLength:
+        except (ListsNotSameLength, ValueError):
             return False
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         slope = self.param_table.get_column_value(0, ParamTableColumns.SLOPE)
@@ -347,13 +387,7 @@ class Window(QtWidgets.QWidget):
         Store.update_or_create_item(
             cell=cell,
             name=name,
-            # number_list=self.data_table.get_column_values(DataTableColumns.NUMBER),
-            # name_list=self.data_table.get_column_values(DataTableColumns.NAME),
             diameter_list=self.data_table.get_column_values(DataTableColumns.DIAMETER),
-            # resistance_list=self.data_table.get_column_values(DataTableColumns.RESISTANCE),
-            # rns_list=self.data_table.get_column_values(DataTableColumns.RNS),
-            # drift_list=self.data_table.get_column_values(DataTableColumns.DRIFT),
-            # square_list=self.data_table.get_column_values(DataTableColumns.SQUARE),
             rn_sqrt_list=self.data_table.get_column_values(DataTableColumns.RN_SQRT),
             slope=self.param_table.get_column_value(0, ParamTableColumns.SLOPE),
             intercept=self.param_table.get_column_value(0, ParamTableColumns.INTERCEPT),
@@ -495,6 +529,12 @@ class Window(QtWidgets.QWidget):
             ws_results.cell(row=2, column=5, value=cell_data.drift_error)
             ws_results.cell(row=2, column=6, value=cell_data.rns_error)
 
+        ws_meta = wb.create_sheet("Meta parameters")
+        ws_meta.append([item.name for item in MetaTableColumns])
+        for item in MetaTableColumns:
+            value = getattr(self, item.slug).value()
+            ws_meta.cell(row=2, column=1 + item.index, value=value)
+
         # Save the Excel file
         if not file_name.endswith(".xlsx"):
             file_name += ".xlsx"
@@ -539,6 +579,7 @@ class Window(QtWidgets.QWidget):
             cell.clear()
         Store.clear()
         self.clear_means()
+        self.clean_all()
 
         options = QtWidgets.QFileDialog.Options()
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -619,6 +660,36 @@ class Window(QtWidgets.QWidget):
                 cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
                 cell_widget.updateUI()
                 self.calculate_means()
+
+            meta_name = "Meta parameters"
+            ws_meta = None
+            try:
+                ws_meta = wb[meta_name]
+            except KeyError:
+                is_some_errors = True
+                some_errors_text += (
+                    f"\nТаблица '{meta_name}' не найдена, 'Последовательное сопротивление Rn' и "
+                    f"'Разрешенная ошибка' выставлены в значение по умолчанию 0! "
+                )
+
+            if ws_meta:
+                meta_column_names = [ws_meta[1][col].value for col in range(0, ws_meta.max_column)]
+                for meta_column in MetaTableColumns:
+                    col = None
+                    try:
+                        col = meta_column_names.index(meta_column.name)
+                    except (ValueError,):
+                        is_some_errors = True
+                        some_errors_text += f"\nКолонка '{meta_column.name}' не найдена в таблице '{meta_name}';"
+
+                    row = 2
+                    try:
+                        value = ws_meta[row][col].value if col is not None and ws_meta[row][col].value else 0
+                        attr = getattr(self, meta_column.slug)
+                        attr.setValue(value)
+                    except IndexError:
+                        is_some_errors = True
+                        continue
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Ошибка чтения", f"Возникли ошибки чтения файла: {str(e)}")

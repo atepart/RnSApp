@@ -56,9 +56,9 @@ def calculate_drift(slope: float, intercept: float):
     return -intercept / slope
 
 
-def calculate_drift_per_sample(diameter: float, resistance: float, rns: float):
+def calculate_drift_per_sample(diameter: float, resistance: float, rns: float, rn_persistent: float):
     """Расчет ухода для одного образца"""
-    return diameter - np.sqrt((4 * rns / resistance) / np.pi)
+    return diameter - np.sqrt((4 * rns / (resistance + rn_persistent)) / np.pi)
 
 
 def calculate_rns(slope: float):
@@ -66,16 +66,31 @@ def calculate_rns(slope: float):
     return np.pi * 0.25 / (slope**2)
 
 
-def calculate_rns_per_sample(resistance: float, diameter: float, drift: float):
+def calculate_rns_per_sample(resistance: float, diameter: float, drift: float, rn_persistent: float):
     """Расчет RnS для одного образца"""
-    return resistance * 0.25 * np.pi * (diameter - drift) ** 2
+    return (resistance + rn_persistent) * 0.25 * np.pi * (diameter - drift) ** 2
 
 
-def calculate_rn_sqrt(resistance: float):
+def calculate_rn_sqrt(resistance: float, rn_consistent: float):
     """Расчет Rn^-0.5"""
-    return 1 / np.sqrt(resistance)
+    return 1 / np.sqrt(resistance + rn_consistent)
 
 
 def calculate_square(diameter: float, drift: float):
     """Расчет площади"""
     return (diameter - drift) ** 2 * np.pi / 4
+
+
+def calculate_rns_error_per_sample(rns_i: float, rns: float):
+    """Расчет ошибки RnS для каждого образца"""
+    return np.abs(rns_i - rns)
+
+
+def calculate_allowed_rns_error(rns_error: float, allowed_error: float):
+    """Расчет допустимой ошибки RnS"""
+    return rns_error * (1 + allowed_error)
+
+
+def calculate_rns_error_diff(rns_error_per_sample: float, rns_error: float, allowed_error: float):
+    """Проверка допустимости ошибки RnS"""
+    return rns_error_per_sample - calculate_allowed_rns_error(rns_error=rns_error, allowed_error=allowed_error)

@@ -39,7 +39,7 @@ class BaseList(list):
 
 @dataclass
 class InitialDataItem:
-    value: str
+    value: Any
     row: int
     col: int
 
@@ -61,13 +61,7 @@ class Item:
         cell: int,
         name: str,
         # Исходные данные
-        # number_list: List[int],
-        # name_list: List[str],
         diameter_list: List[float],
-        # resistance_list: List[float],
-        # rns_list: List[float],
-        # drift_list: List[float],
-        # square_list: List[float],
         rn_sqrt_list: List[float],
         # Расчетные данные
         slope: float,
@@ -82,13 +76,7 @@ class Item:
         self.cell = cell
         self.name = name
 
-        # self.number_list = number_list
-        # self.name_list = name_list
         self.diameter_list = diameter_list
-        # self.resistance_list = resistance_list
-        # self.rns_list = rns_list
-        # self.drift_list = drift_list
-        # self.square_list = square_list
         self.rn_sqrt_list = rn_sqrt_list
 
         self.slope = slope
