@@ -36,6 +36,10 @@ class TableColumns(Enum, metaclass=TableColumnsMeta):
         return [member.name for member in cls]
 
     @classmethod
+    def get_all_slugs(cls):
+        return [member.slug for member in cls]
+
+    @classmethod
     def get_by_index(cls, index: int):
         for i, item in enumerate(cls):
             if i == index:
@@ -43,16 +47,16 @@ class TableColumns(Enum, metaclass=TableColumnsMeta):
 
 
 class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
-    NUMBER = ("№", int)
-    NAME = ("Имя", str)
-    SELECT = ("✓", bool)
-    DIAMETER = ("Диаметр ACAD (μm)", float)
-    RESISTANCE = ("Rn (Ω)", float)
-    RNS = ("RnS", float)
-    RNS_ERROR = ("Ошибка RnS", float)
-    DRIFT = ("Суммарный Уход (μm)", float)
-    SQUARE = ("Площадь (μm^2)", float)
-    RN_SQRT = ("Rn^-0.5", float)
+    NUMBER = ("№", int, "№")
+    NAME = ("Имя", str, "Имя")
+    SELECT = ("", bool, "✓")
+    DIAMETER = ("Диаметр ACAD (μm)", float, "Диаметр ACAD (μm)")
+    RESISTANCE = ("Rn (Ω)", float, "Rn (Ω)")
+    RNS = ("RnS", float, "RnS")
+    RNS_ERROR = ("Ошибка RnS", float, "Ошибка RnS")
+    DRIFT = ("Суммарный Уход (μm)", float, "Суммарный Уход (μm)")
+    SQUARE = ("Площадь (μm^2)", float, "Площадь (μm^2)")
+    RN_SQRT = ("Rn^-0.5", float, "Rn^-0.5")
 
 
 class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):

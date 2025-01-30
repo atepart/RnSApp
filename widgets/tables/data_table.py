@@ -11,22 +11,43 @@ from widgets.tables.item import TableWidgetItem
 from widgets.tables.mixins import TableMixin
 
 
+class Header(QHeaderView):
+    def __init__(self, parent):
+        super(Header, self).__init__(QtCore.Qt.Orientation.Horizontal, parent)
+        self.checkbox = QtWidgets.QCheckBox(self)
+        self.checkbox.stateChanged.connect(self.on_state_changed)
+
+    def on_state_changed(self, state):
+        for row in range(self.parent().rowCount()):
+            item = self.parent().cellWidget(row, DataTableColumns.SELECT.index)
+            if isinstance(item, QtWidgets.QCheckBox):
+                item.setChecked(state)
+
+    def paintSection(self, painter, rect, logicalIndex):
+        painter.save()
+        super().paintSection(painter, rect, logicalIndex)
+        painter.restore()
+        if logicalIndex == DataTableColumns.SELECT.index:
+            self.checkbox.setGeometry(rect)
+
+
 class DataTable(TableMixin, QtWidgets.QTableWidget):
     def __init__(self, rows):
         super(DataTable, self).__init__(rows, len(DataTableColumns.get_all_names()))
-
+        self.header = Header(self)
+        self.setHorizontalHeader(self.header)
         # Set Table headers
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
-        self.setColumnWidth(DataTableColumns.NUMBER.index, 30)
-        self.setColumnWidth(DataTableColumns.SELECT.index, 30)
         self.setColumnWidth(DataTableColumns.NAME.index, 160)
         self.setColumnWidth(DataTableColumns.RESISTANCE.index, 160)
         self.setColumnWidth(DataTableColumns.RNS.index, 100)
         self.setColumnWidth(DataTableColumns.RN_SQRT.index, 100)
-        header = self.horizontalHeader()
-        header.setSectionResizeMode(DataTableColumns.DIAMETER.index, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(DataTableColumns.SQUARE.index, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.header.setSectionResizeMode(DataTableColumns.NUMBER.index, QHeaderView.ResizeMode.ResizeToContents)
+        self.header.setSectionResizeMode(DataTableColumns.SELECT.index, QHeaderView.ResizeMode.ResizeToContents)
+        self.header.setSectionResizeMode(DataTableColumns.DIAMETER.index, QHeaderView.ResizeMode.ResizeToContents)
+        self.header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
+        self.header.setSectionResizeMode(DataTableColumns.SQUARE.index, QHeaderView.ResizeMode.ResizeToContents)
 
         # Remove vertical Table headers
         self.verticalHeader().setVisible(False)
@@ -70,8 +91,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
     def set_default_checks(self):
         for i in range(self.rowCount()):
             checkbox = QtWidgets.QCheckBox()
-            checkbox.setChecked(True)
             self.setCellWidget(i, DataTableColumns.SELECT.index, checkbox)
+            self.setItem(i, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
 
     def keyPressEvent(self, event):
         # На нажатие Enter/Return переход на следующую строку
@@ -197,9 +218,10 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 TableWidgetItem(str(row + 1)),
             )  # Clear Number column
             checkbox = QtWidgets.QCheckBox()
-            checkbox.setChecked(True)
             self.setCellWidget(row, DataTableColumns.SELECT.index, checkbox)
+            self.setItem(row, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
             self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))  # Clear Square
+        self.header.checkbox.setChecked(True)
 
     def clear_rn(self):
         for row in range(self.rowCount()):
@@ -267,6 +289,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         return data
 
     def load_data(self, data: List[InitialDataItem]):
+        self.clear_all()
         for item in data:
             if item["col"] == DataTableColumns.SELECT.index:
                 checkbox = QtWidgets.QCheckBox()

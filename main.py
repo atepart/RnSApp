@@ -258,6 +258,7 @@ class Window(QtWidgets.QWidget):
         )
 
         for row in range(self.data_table.columnCount()):
+            self.data_table.color_row(row=row, background_color=WHITE, text_color=BLACK)
             rns_value = self.data_table.get_column_value(row, DataTableColumns.RNS)
             if not rns_value:
                 continue
@@ -510,7 +511,7 @@ class Window(QtWidgets.QWidget):
             ws_cells.row_dimensions[row[0].row].height = 21
 
         # Сохраняем все данные
-        data_headers = [self.data_table.horizontalHeaderItem(i).text() for i in range(self.data_table.columnCount())]
+        data_headers = DataTableColumns.get_all_slugs()
         results_headers = [
             self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())
         ]
@@ -618,10 +619,10 @@ class Window(QtWidgets.QWidget):
                 for data_column in DataTableColumns:
                     col = None
                     try:
-                        col = column_names.index(data_column.name)
+                        col = column_names.index(data_column.slug)
                     except (ValueError,):
                         is_some_errors = True
-                        some_errors_text += f"\nКолонка '{data_column.name}' не найдена в таблице '{data_name}';"
+                        some_errors_text += f"\nКолонка '{data_column.slug}' не найдена в таблице '{data_name}';"
 
                     for row in range(2, ws_data.max_row + 1):
                         try:
