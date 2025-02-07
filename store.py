@@ -72,6 +72,9 @@ class Item:
         rns_error: float,
         # Исходная таблица
         initial_data: InitialDataItemList[InitialDataItem],
+        # Мета
+        rn_consistent: float = 0,
+        allowed_error: float = 0,
     ):
         self.cell = cell
         self.name = name
@@ -85,6 +88,9 @@ class Item:
         self.rns = rns
         self.drift_error = drift_error
         self.rns_error = rns_error
+
+        self.rn_consistent = rn_consistent
+        self.allowed_error = allowed_error
 
         self.initial_data = initial_data
         self.is_plot = False

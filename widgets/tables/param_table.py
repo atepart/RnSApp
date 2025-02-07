@@ -37,8 +37,10 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
 
-        # hide column DRIFT_ERROR
+        # hide column DRIFT_ERROR, RN_CONSISTENT, ALLOWED_ERROR
         self.setColumnHidden(ParamTableColumns.DRIFT_ERROR.index, True)
+        self.setColumnHidden(ParamTableColumns.RN_CONSISTENT.index, True)
+        self.setColumnHidden(ParamTableColumns.ALLOWED_ERROR.index, True)
 
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)

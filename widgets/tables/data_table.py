@@ -79,6 +79,14 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(DataTableColumns.DRIFT.index, True)
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
 
+        self.itemChanged.connect(self.on_item_changed)
+
+    def on_item_changed(self, item):
+        if item.column() in (DataTableColumns.DIAMETER.index, DataTableColumns.RESISTANCE.index):
+            row = item.row()
+            checkbox = self.cellWidget(row, DataTableColumns.SELECT.index)
+            checkbox.setChecked(bool(item.text()))
+
     def set_default_numbers(self):
         for i in range(self.rowCount()):
             item = TableWidgetItem(str(i + 1))
@@ -181,6 +189,10 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         return super().get_column_value(row, column)
 
     def clear_all(self):
+        try:
+            self.itemChanged.disconnect()
+        except TypeError:
+            ...
         for row in range(self.rowCount()):
             self.setItem(
                 row,
@@ -222,8 +234,13 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
             self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))  # Clear Square
         self.header.checkbox.setChecked(True)
+        self.itemChanged.connect(self.on_item_changed)
 
     def clear_rn(self):
+        try:
+            self.itemChanged.disconnect()
+        except TypeError:
+            ...
         for row in range(self.rowCount()):
             self.setItem(
                 row,
@@ -246,6 +263,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 QtWidgets.QTableWidgetItem(""),
             )  # Clear Rn^-0.5 column
             self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
+        self.itemChanged.connect(self.on_item_changed)
 
     def clear_calculations(self):
         for row in range(self.rowCount()):
@@ -267,11 +285,16 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
 
     def color_row(self, row, background_color, text_color):
+        try:
+            self.itemChanged.disconnect()
+        except TypeError:
+            ...
         for col in range(self.columnCount()):
             item = self.item(row, col)
             if item:
                 item.setBackground(QBrush(QColor(background_color)))
                 item.setForeground(QBrush(QColor(text_color)))
+        self.itemChanged.connect(self.on_item_changed)
 
     def dump_data(self):
         data = []
@@ -290,6 +313,10 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
     def load_data(self, data: List[InitialDataItem]):
         self.clear_all()
+        try:
+            self.itemChanged.disconnect()
+        except TypeError:
+            ...
         for item in data:
             if item["col"] == DataTableColumns.SELECT.index:
                 checkbox = QtWidgets.QCheckBox()
@@ -297,3 +324,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 self.setCellWidget(item["row"], DataTableColumns.SELECT.index, checkbox)
             else:
                 self.setItem(item["row"], item["col"], TableWidgetItem(f"{item['value']}"))
+        self.itemChanged.connect(self.on_item_changed)
+
+        if not any(self.cellWidget(row, DataTableColumns.SELECT.index).isChecked() for row in range(self.rowCount())):
+            for row in range(self.rowCount()):
+                self.cellWidget(row, DataTableColumns.SELECT.index).setChecked(True)

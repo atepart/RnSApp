@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PyQt5.QtGui import QIcon
 from openpyxl.styles import Side, Border, Font, Alignment
 
-from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS, MetaTableColumns, RNS_ERROR_COLOR, WHITE, BLACK
+from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS, RNS_ERROR_COLOR, WHITE, BLACK
 from errors import ListsNotSameLength
 from store import Store, InitialDataItem, InitialDataItemList
 from utils import (
@@ -397,7 +397,10 @@ class Window(QtWidgets.QWidget):
             drift_error=self.param_table.get_column_value(0, ParamTableColumns.DRIFT_ERROR),
             rns_error=self.param_table.get_column_value(0, ParamTableColumns.RNS_ERROR),
             initial_data=self.data_table.dump_data(),
+            rn_consistent=self.rn_consistent.value(),
+            allowed_error=self.allowed_error.value(),
         )
+        self.set_active_cell(cell)
 
     def plot_data(self, cell: int):
         color = PLOT_COLORS[cell - 1]
@@ -446,6 +449,7 @@ class Window(QtWidgets.QWidget):
         self.data_table.clear_all()
         self.param_table.clear_all()
         self.plot.clear()
+        self.set_active_cell(0)
 
     @staticmethod
     def parse_cell(cell):
@@ -512,9 +516,7 @@ class Window(QtWidgets.QWidget):
 
         # Сохраняем все данные
         data_headers = DataTableColumns.get_all_slugs()
-        results_headers = [
-            self.param_table.horizontalHeaderItem(i).text() for i in range(self.param_table.columnCount())
-        ]
+        results_headers = ParamTableColumns.get_all_names()
         for cell_data in Store.data:
             ws_data = wb.create_sheet(f"Data №{cell_data.cell} {cell_data.name}")
             ws_data.append(data_headers)
@@ -523,18 +525,8 @@ class Window(QtWidgets.QWidget):
 
             ws_results = wb.create_sheet(f"Results №{cell_data.cell} {cell_data.name}")
             ws_results.append(results_headers)
-            ws_results.cell(row=2, column=1, value=cell_data.slope)
-            ws_results.cell(row=2, column=2, value=cell_data.intercept)
-            ws_results.cell(row=2, column=3, value=cell_data.drift)
-            ws_results.cell(row=2, column=4, value=cell_data.rns)
-            ws_results.cell(row=2, column=5, value=cell_data.drift_error)
-            ws_results.cell(row=2, column=6, value=cell_data.rns_error)
-
-        ws_meta = wb.create_sheet("Meta parameters")
-        ws_meta.append([item.name for item in MetaTableColumns])
-        for item in MetaTableColumns:
-            value = getattr(self, item.slug).value()
-            ws_meta.cell(row=2, column=1 + item.index, value=value)
+            for i, param in enumerate(ParamTableColumns):
+                ws_results.cell(row=2, column=i + 1, value=getattr(cell_data, param.slug, ""))
 
         # Save the Excel file
         if not file_name.endswith(".xlsx"):
@@ -548,6 +540,16 @@ class Window(QtWidgets.QWidget):
         self.data_table.load_data(data=cell_data.initial_data)
         self.param_table.load_data(data=cell_data)
         self.plot_current_data()
+        self.set_active_cell(cell)
+        self.rn_consistent.setValue(cell_data.rn_consistent)
+        self.allowed_error.setValue(cell_data.allowed_error)
+
+    def set_active_cell(self, cell: int):
+        for cw in self.cell_widgets:
+            if cw.index == cell:
+                cw.set_active(True)
+                continue
+            cw.set_active(False)
 
     def clear_cell_data(self):
         reply = QtWidgets.QMessageBox.question(
@@ -563,6 +565,7 @@ class Window(QtWidgets.QWidget):
                 cell.clear()
             Store.clear()
             self.clear_means()
+            self.set_active_cell(0)
 
     def load_cell_data(self):
         reply = QtWidgets.QMessageBox.question(
@@ -581,6 +584,7 @@ class Window(QtWidgets.QWidget):
         Store.clear()
         self.clear_means()
         self.clean_all()
+        self.set_active_cell(0)
 
         options = QtWidgets.QFileDialog.Options()
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -641,18 +645,30 @@ class Window(QtWidgets.QWidget):
                     for v in initial_data.filter(col=DataTableColumns.RN_SQRT.index)
                 ]
 
+                result_column_names = [ws_result[1][col].value for col in range(0, ws_result.max_column)]
+                result_kwargs = {}
+                for result_column in ParamTableColumns:
+                    try:
+                        col = result_column_names.index(result_column.name)
+                    except (ValueError,):
+                        is_some_errors = True
+                        some_errors_text += f"\nКолонка '{result_column.name}' не найдена в таблице '{result_name}';"
+                        continue
+                    row = 2
+                    try:
+                        value = ws_result[row][col].value if col is not None and ws_result[row][col].value else 0
+                        result_kwargs[result_column.slug] = value
+                    except IndexError:
+                        is_some_errors = True
+                        continue
+
                 cell_item = Store.update_or_create_item(
                     cell=i,
                     name=cell_name,
                     diameter_list=diameter_list,
                     rn_sqrt_list=rn_sqrt_list,
-                    slope=ws_result[2][ParamTableColumns.SLOPE.index].value,
-                    intercept=ws_result[2][ParamTableColumns.INTERCEPT.index].value,
-                    drift=ws_result[2][ParamTableColumns.DRIFT.index].value,
-                    rns=ws_result[2][ParamTableColumns.RNS.index].value,
-                    drift_error=ws_result[2][ParamTableColumns.DRIFT_ERROR.index].value,
-                    rns_error=ws_result[2][ParamTableColumns.RNS_ERROR.index].value,
                     initial_data=initial_data,
+                    **result_kwargs,
                 )
 
                 cell_widget = self.cell_widgets[cell_item.cell - 1]
@@ -661,36 +677,6 @@ class Window(QtWidgets.QWidget):
                 cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
                 cell_widget.updateUI()
                 self.calculate_means()
-
-            meta_name = "Meta parameters"
-            ws_meta = None
-            try:
-                ws_meta = wb[meta_name]
-            except KeyError:
-                is_some_errors = True
-                some_errors_text += (
-                    f"\nТаблица '{meta_name}' не найдена, 'Последовательное сопротивление Rn' и "
-                    f"'Разрешенная ошибка' выставлены в значение по умолчанию 0! "
-                )
-
-            if ws_meta:
-                meta_column_names = [ws_meta[1][col].value for col in range(0, ws_meta.max_column)]
-                for meta_column in MetaTableColumns:
-                    col = None
-                    try:
-                        col = meta_column_names.index(meta_column.name)
-                    except (ValueError,):
-                        is_some_errors = True
-                        some_errors_text += f"\nКолонка '{meta_column.name}' не найдена в таблице '{meta_name}';"
-
-                    row = 2
-                    try:
-                        value = ws_meta[row][col].value if col is not None and ws_meta[row][col].value else 0
-                        attr = getattr(self, meta_column.slug)
-                        attr.setValue(value)
-                    except IndexError:
-                        is_some_errors = True
-                        continue
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Ошибка чтения", f"Возникли ошибки чтения файла: {str(e)}")

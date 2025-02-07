@@ -60,15 +60,12 @@ class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
 
 
 class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
-    SLOPE = ("Наклон", float)
-    INTERCEPT = ("Пересечение", float)
-    DRIFT = ("Суммарный Уход", float)
-    RNS = ("RnS", float)
-    DRIFT_ERROR = ("Ошибка ухода", float)
-    RNS_ERROR = ("Ошибка RnS", float)
-
-
-class MetaTableColumns(TableColumns, metaclass=TableColumnsMeta):
+    SLOPE = ("Наклон", float, "slope")
+    INTERCEPT = ("Пересечение", float, "intercept")
+    DRIFT = ("Суммарный Уход", float, "drift")
+    RNS = ("RnS", float, "rns")
+    DRIFT_ERROR = ("Ошибка ухода", float, "drift_error")
+    RNS_ERROR = ("Ошибка RnS", float, "rns_error")
     RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
     ALLOWED_ERROR = ("Разрешенная ошибка", float, "allowed_error")
 
@@ -96,3 +93,4 @@ PLOT_COLORS = [
 RNS_ERROR_COLOR = "#F56B6B"
 WHITE = "#FFFFFF"
 BLACK = "#000000"
+BLUE = "#a2d2ff"

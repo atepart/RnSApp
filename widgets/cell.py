@@ -1,6 +1,7 @@
 from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtGui import QPalette
 
-from constants import ParamTableColumns
+from constants import ParamTableColumns, BLUE, WHITE
 from store import Store
 
 
@@ -162,3 +163,9 @@ class CellWidget(QtWidgets.QGroupBox):
         self.checkbox.setVisible(False)
         self.writeButton.setVisible(True)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
+
+    def set_active(self, value: bool):
+        if value:
+            self.number.setText(f"<b>№{self.index}</b>")
+        else:
+            self.number.setText(f"№{self.index}")
