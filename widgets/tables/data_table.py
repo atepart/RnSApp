@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from PyQt5 import QtWidgets, QtCore, QtGui
@@ -9,6 +10,9 @@ from store import InitialDataItem
 from widgets.delegates import RoundedDelegate
 from widgets.tables.item import TableWidgetItem
 from widgets.tables.mixins import TableMixin
+
+
+logger = logging.getLogger(__name__)
 
 
 class Header(QHeaderView):
@@ -80,6 +84,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
 
         self.itemChanged.connect(self.on_item_changed)
+
+        self.clear_all()
 
     def on_item_changed(self, item):
         if item.column() in (DataTableColumns.DIAMETER.index, DataTableColumns.RESISTANCE.index):
@@ -306,7 +312,11 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                     value = "True" if cell_widget.isChecked() else ""
                 else:
                     item = self.item(row, col)
-                    value = DataTableColumns.get_by_index(col).dtype(item.text()) if item.text() else ""
+                    if not item:
+                        value = ""
+                        logger.debug(f"DataTable item row={row} col={col} is None")
+                    else:
+                        value = DataTableColumns.get_by_index(col).dtype(item.text()) if item.text() else ""
 
                 data.append(InitialDataItem(value=value, row=row, col=col))
         return data

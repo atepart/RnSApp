@@ -52,6 +52,13 @@ class CellWidget(QtWidgets.QGroupBox):
         self.customContextMenuRequested.connect(self.showContextMenu)
 
     def openWriteDialog(self):
+        if self.param_table.is_empty():
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Нет рассчитанных данных!",
+                "Сперва нужно занести данные и сделать расчет, после записывать!",
+            )
+            return
         name, ok = QtWidgets.QInputDialog.getText(self, "Запись", "Введите уникальное имя:")
         if ok and name:
             if Store.data.exclude(cell=self.index).filter(name=name).exists():

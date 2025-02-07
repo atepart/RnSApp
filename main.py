@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=[logging.StreamHandler(), logging.FileHandler("debug.log")],
 )
 
 
@@ -257,7 +257,7 @@ class Window(QtWidgets.QWidget):
             TableWidgetItem(str(rns_error)),
         )
 
-        for row in range(self.data_table.columnCount()):
+        for row in range(self.data_table.rowCount()):
             self.data_table.color_row(row=row, background_color=WHITE, text_color=BLACK)
             rns_value = self.data_table.get_column_value(row, DataTableColumns.RNS)
             if not rns_value:
@@ -279,6 +279,13 @@ class Window(QtWidgets.QWidget):
             0,
             ParamTableColumns.DRIFT_ERROR.index,
             TableWidgetItem(str(drift_error)),
+        )
+
+        self.param_table.setItem(
+            0, ParamTableColumns.RN_CONSISTENT.index, TableWidgetItem(str(self.rn_consistent.value()))
+        )
+        self.param_table.setItem(
+            0, ParamTableColumns.ALLOWED_ERROR.index, TableWidgetItem(str(self.allowed_error.value()))
         )
         return True
 

@@ -42,6 +42,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(ParamTableColumns.RN_CONSISTENT.index, True)
         self.setColumnHidden(ParamTableColumns.ALLOWED_ERROR.index, True)
 
+        self.clear_all()
+
     def get_column_value(self, row: int, column: ParamTableColumns):
         return super().get_column_value(row, column)
 
@@ -60,3 +62,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItem(0, ParamTableColumns.RNS.index, TableWidgetItem(str(data.rns)))
         self.setItem(0, ParamTableColumns.DRIFT_ERROR.index, TableWidgetItem(str(data.drift_error)))
         self.setItem(0, ParamTableColumns.RNS_ERROR.index, TableWidgetItem(str(data.rns_error)))
+        self.setItem(0, ParamTableColumns.RN_CONSISTENT.index, TableWidgetItem(str(data.rn_consistent)))
+        self.setItem(0, ParamTableColumns.ALLOWED_ERROR.index, TableWidgetItem(str(data.allowed_error)))
+
+    def is_empty(self):
+        return not all(self.item(0, param.index).text() for param in ParamTableColumns)
