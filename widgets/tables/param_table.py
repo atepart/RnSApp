@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 from constants import ParamTableColumns
 from store import Item
@@ -8,7 +8,7 @@ from widgets.tables.mixins import TableMixin
 
 
 class ParamTable(TableMixin, QtWidgets.QTableWidget):
-    def __init__(self):
+    def __init__(self) -> None:
         super(ParamTable, self).__init__(1, len(ParamTableColumns.get_all_names()))
 
         self.setHorizontalHeaderLabels(ParamTableColumns.get_all_names())

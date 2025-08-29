@@ -1,19 +1,17 @@
-from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtGui import QPalette
+from PySide6 import QtCore, QtWidgets
 
-from constants import ParamTableColumns, BLUE, WHITE
+from constants import ParamTableColumns
 from store import Store
 
 
 class CellWidget(QtWidgets.QGroupBox):
-    def __init__(self, parent, index: int, param_table):
+    def __init__(self, parent, index: int, param_table) -> None:
         super().__init__(parent)
         self.index = index
         self.param_table = param_table
         self.initUI()
 
     def initUI(self):
-
         layout = QtWidgets.QVBoxLayout()
         hlayout1 = QtWidgets.QHBoxLayout()
         hlayout2 = QtWidgets.QHBoxLayout()
@@ -62,9 +60,7 @@ class CellWidget(QtWidgets.QGroupBox):
         name, ok = QtWidgets.QInputDialog.getText(self, "Запись", "Введите уникальное имя:")
         if ok and name:
             if Store.data.exclude(cell=self.index).filter(name=name).exists():
-                QtWidgets.QMessageBox.warning(
-                    self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя."
-                )
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя.")
                 return
             self.name.setText(name)
             self.writeData()
@@ -98,9 +94,7 @@ class CellWidget(QtWidgets.QGroupBox):
         name, ok = QtWidgets.QInputDialog.getText(self, "Переименование", "Введите новое имя:")
         if name and ok:
             if Store.data.exclude(cell=self.index).filter(name=name).exists():
-                QtWidgets.QMessageBox.warning(
-                    self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя."
-                )
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя.")
                 return
             self.name.setText(name)
             self.parent().parent().remove_plot(cell=self.index)

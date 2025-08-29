@@ -1,34 +1,34 @@
 import logging
-import sys
 import re
+import sys
+
 import numpy as np
 import openpyxl
-from PyQt5 import QtWidgets
 import pyqtgraph as pg
-from PyQt5.QtGui import QIcon
-from openpyxl.styles import Side, Border, Font, Alignment
+from openpyxl.styles import Alignment, Border, Font, Side
+from PySide6 import QtWidgets
+from PySide6.QtGui import QIcon
 
-from constants import DataTableColumns, ParamTableColumns, PLOT_COLORS, RNS_ERROR_COLOR, WHITE, BLACK
+from constants import BLACK, PLOT_COLORS, RNS_ERROR_COLOR, WHITE, DataTableColumns, ParamTableColumns
 from errors import ListsNotSameLength
-from store import Store, InitialDataItem, InitialDataItemList
+from store import InitialDataItem, InitialDataItemList, Store
 from utils import (
-    linear,
-    linear_fit,
-    calculate_rns,
-    calculate_rns_per_sample,
+    calculate_drift,
     calculate_drift_per_sample,
     calculate_rn_sqrt,
-    drop_nans,
-    calculate_square,
-    calculate_drift,
-    calculate_rns_error_per_sample,
+    calculate_rns,
     calculate_rns_error_diff,
+    calculate_rns_error_per_sample,
+    calculate_rns_per_sample,
+    calculate_square,
+    drop_nans,
+    linear,
+    linear_fit,
 )
 from widgets.cell import CellWidget
-from widgets.tables.item import TableWidgetItem
 from widgets.tables.data_table import DataTable
+from widgets.tables.item import TableWidgetItem
 from widgets.tables.param_table import ParamTable
-
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -39,7 +39,7 @@ logging.basicConfig(
 
 
 class Window(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self) -> None:
         super(Window, self).__init__()
         self.setGeometry(100, 100, 1200, 900)
 
@@ -379,6 +379,7 @@ class Window(QtWidgets.QWidget):
 
         if items_fit:
             items_fit[0].setData(diameter_list, y_appr)
+            return None
 
         else:
             pen2 = pg.mkPen(color="#000000", width=3)
@@ -390,6 +391,7 @@ class Window(QtWidgets.QWidget):
                 symbolSize=0,
                 symbolBrush=pen2.color(),
             )
+            return None
 
     def addCellData(self, cell: int, name: str):
         Store.update_or_create_item(
@@ -648,8 +650,7 @@ class Window(QtWidgets.QWidget):
                     for v in initial_data.filter(col=DataTableColumns.DIAMETER.index)
                 ]
                 rn_sqrt_list = [
-                    float(v.value) if v.value else None
-                    for v in initial_data.filter(col=DataTableColumns.RN_SQRT.index)
+                    float(v.value) if v.value else None for v in initial_data.filter(col=DataTableColumns.RN_SQRT.index)
                 ]
 
                 result_column_names = [ws_result[1][col].value for col in range(0, ws_result.max_column)]

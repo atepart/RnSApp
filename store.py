@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import List, Any, Optional
+from typing import Any, List, Optional
 
 
 class BaseList(list):
     def _filter(self, **kwargs) -> filter:
         def _filter(item):
             for key, value in kwargs.items():
-                if not getattr(item, key, None) == value:
+                if getattr(item, key, None) != value:
                     return False
             return True
 
@@ -15,7 +15,7 @@ class BaseList(list):
     def _exclude(self, **kwargs) -> filter:
         def _exclude(item):
             for key, value in kwargs.items():
-                if not getattr(item, key, None) != value:
+                if getattr(item, key, None) == value:
                     return False
             return True
 
@@ -75,7 +75,7 @@ class Item:
         # Мета
         rn_consistent: float = 0,
         allowed_error: float = 0,
-    ):
+    ) -> None:
         self.cell = cell
         self.name = name
 

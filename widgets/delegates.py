@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets
+from PySide6 import QtWidgets
 
 
 class ReadOnlyDelegate(QtWidgets.QStyledItemDelegate):
@@ -7,7 +7,7 @@ class ReadOnlyDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class RoundedDelegate(QtWidgets.QStyledItemDelegate):
-    def __init__(self, rounded: int = 2, parent=None):
+    def __init__(self, rounded: int = 2, parent=None) -> None:
         super().__init__(parent)
         self.rounded = rounded
 

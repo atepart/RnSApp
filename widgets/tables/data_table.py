@@ -1,9 +1,10 @@
+import contextlib
 import logging
 from typing import List
 
-from PyQt5 import QtWidgets, QtCore, QtGui
-from PyQt5.QtGui import QBrush, QColor
-from PyQt5.QtWidgets import QHeaderView
+from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtGui import QBrush, QColor
+from PySide6.QtWidgets import QHeaderView
 
 from constants import DataTableColumns
 from store import InitialDataItem
@@ -11,12 +12,11 @@ from widgets.delegates import RoundedDelegate
 from widgets.tables.item import TableWidgetItem
 from widgets.tables.mixins import TableMixin
 
-
 logger = logging.getLogger(__name__)
 
 
 class Header(QHeaderView):
-    def __init__(self, parent):
+    def __init__(self, parent) -> None:
         super(Header, self).__init__(QtCore.Qt.Orientation.Horizontal, parent)
         self.checkbox = QtWidgets.QCheckBox(self)
         self.checkbox.stateChanged.connect(self.on_state_changed)
@@ -36,7 +36,7 @@ class Header(QHeaderView):
 
 
 class DataTable(TableMixin, QtWidgets.QTableWidget):
-    def __init__(self, rows):
+    def __init__(self, rows) -> None:
         super(DataTable, self).__init__(rows, len(DataTableColumns.get_all_names()))
         self.header = Header(self)
         self.setHorizontalHeader(self.header)
@@ -164,7 +164,6 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             DataTableColumns.NUMBER.index,
             DataTableColumns.NAME.index,
         ]:  # Можно вставлять только в Number, Name, Diameter, Resistance
-
             return
         for i, row in enumerate(rows):
             values = row.split("\t")
@@ -195,10 +194,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         return super().get_column_value(row, column)
 
     def clear_all(self):
-        try:
+        with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-        except TypeError:
-            ...
+
         for row in range(self.rowCount()):
             self.setItem(
                 row,
@@ -243,10 +241,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_rn(self):
-        try:
+        with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-        except TypeError:
-            ...
+
         for row in range(self.rowCount()):
             self.setItem(
                 row,
@@ -291,10 +288,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
 
     def color_row(self, row, background_color, text_color):
-        try:
+        with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-        except TypeError:
-            ...
+
         for col in range(self.columnCount()):
             item = self.item(row, col)
             if item:
@@ -306,7 +302,6 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         data = []
         for row in range(self.rowCount()):
             for col in range(self.columnCount()):
-
                 if col == DataTableColumns.SELECT.index:
                     cell_widget = self.cellWidget(row, col)
                     value = "True" if cell_widget.isChecked() else ""
@@ -323,10 +318,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
     def load_data(self, data: List[InitialDataItem]):
         self.clear_all()
-        try:
+        with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-        except TypeError:
-            ...
+
         for item in data:
             if item["col"] == DataTableColumns.SELECT.index:
                 checkbox = QtWidgets.QCheckBox()

@@ -1,4 +1,4 @@
-from enum import EnumMeta, Enum
+from enum import Enum, EnumMeta
 
 
 class TableColumnsMeta(EnumMeta):
@@ -10,7 +10,7 @@ class TableColumnsMeta(EnumMeta):
 
 
 class TableColumns(Enum, metaclass=TableColumnsMeta):
-    def __init__(self, name, dtype, slug=None):
+    def __init__(self, name, dtype, slug=None) -> None:
         self._name = name
         self._dtype = dtype
         self._slug = slug
@@ -44,6 +44,7 @@ class TableColumns(Enum, metaclass=TableColumnsMeta):
         for i, item in enumerate(cls):
             if i == index:
                 return item
+        return None
 
 
 class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
