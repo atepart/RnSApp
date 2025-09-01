@@ -1,4 +1,4 @@
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.constants import ParamTableColumns
 from src.store import Store
@@ -69,6 +69,7 @@ class CellWidget(QtWidgets.QGroupBox):
     def writeData(self):
         self.rns.setText(f"RnS: {round(self.param_table.get_column_value(0, ParamTableColumns.RNS), 1)}")
         self.drift.setText(f"Уход: {round(self.param_table.get_column_value(0, ParamTableColumns.DRIFT), 3)}")
+        # parent().parent() points to the main app widget (RnSApp)
         self.parent().parent().calculate_means()
         self.parent().parent().addCellData(cell=self.index, name=self.name.text())
 
@@ -121,7 +122,7 @@ class CellWidget(QtWidgets.QGroupBox):
         buttonBox.accepted.connect(dialog.accept)
         buttonBox.rejected.connect(dialog.reject)
 
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+        if dialog.exec() == QtWidgets.QDialog.Accepted:
             self.writeData()
 
     def showData(self):
@@ -139,20 +140,20 @@ class CellWidget(QtWidgets.QGroupBox):
     def showContextMenu(self, position):
         menu = QtWidgets.QMenu(self)
 
-        showAction = QtWidgets.QAction("Показать данные", self)
+        showAction = QtGui.QAction("Показать данные", self)
         showAction.triggered.connect(self.showData)
         menu.addAction(showAction)
 
-        renameAction = QtWidgets.QAction("Переименовать", self)
+        renameAction = QtGui.QAction("Переименовать", self)
         renameAction.triggered.connect(self.openRenameDialog)
         menu.addAction(renameAction)
 
-        rewriteAction = QtWidgets.QAction("Перезаписать", self)
+        rewriteAction = QtGui.QAction("Перезаписать", self)
         rewriteAction.triggered.connect(self.openRewriteDataDialog)
         menu.addAction(rewriteAction)
 
         # Показ контекстного меню в позиции курсора
-        menu.exec_(self.mapToGlobal(position))
+        menu.exec(self.mapToGlobal(position))
 
     def clear(self):
         self.name.setText("")

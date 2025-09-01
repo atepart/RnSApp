@@ -8,3 +8,4 @@ venv
 *build
 *.spec
 *.log
+.ruff_cache
