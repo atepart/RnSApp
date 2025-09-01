@@ -1,6 +1,6 @@
 import numpy as np
 
-from errors import ListsNotSameLength
+from .errors import ListsNotSameLength
 
 
 def linear_fit(x, y):
