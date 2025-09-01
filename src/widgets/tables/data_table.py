@@ -6,11 +6,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QHeaderView
 
-from constants import DataTableColumns
-from store import InitialDataItem
-from widgets.delegates import RoundedDelegate
-from widgets.tables.item import TableWidgetItem
-from widgets.tables.mixins import TableMixin
+from src.constants import DataTableColumns
+from src.store import InitialDataItem
+from src.widgets.delegates import RoundedDelegate
+from src.widgets.tables.item import TableWidgetItem
+from src.widgets.tables.mixins import TableMixin
 
 logger = logging.getLogger(__name__)
 

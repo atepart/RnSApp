@@ -1,5 +1,5 @@
-from constants import TableColumns
-from widgets.delegates import ReadOnlyDelegate
+from src.constants import TableColumns
+from src.widgets.delegates import ReadOnlyDelegate
 
 
 class TableMixin:

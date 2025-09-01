@@ -1,7 +1,7 @@
 from PySide6 import QtCore, QtWidgets
 
-from constants import ParamTableColumns
-from store import Store
+from src.constants import ParamTableColumns
+from src.store import Store
 
 
 class CellWidget(QtWidgets.QGroupBox):

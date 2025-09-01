@@ -9,10 +9,10 @@ from openpyxl.styles import Alignment, Border, Font, Side
 from PySide6 import QtWidgets
 from PySide6.QtGui import QIcon
 
-from constants import BLACK, PLOT_COLORS, RNS_ERROR_COLOR, WHITE, DataTableColumns, ParamTableColumns
-from errors import ListsNotSameLength
-from store import InitialDataItem, InitialDataItemList, Store
-from utils import (
+from src.constants import BLACK, PLOT_COLORS, RNS_ERROR_COLOR, WHITE, DataTableColumns, ParamTableColumns
+from src.errors import ListsNotSameLength
+from src.store import InitialDataItem, InitialDataItemList, Store
+from src.utils import (
     calculate_drift,
     calculate_drift_per_sample,
     calculate_rn_sqrt,
@@ -25,10 +25,7 @@ from utils import (
     linear,
     linear_fit,
 )
-from widgets.cell import CellWidget
-from widgets.tables.data_table import DataTable
-from widgets.tables.item import TableWidgetItem
-from widgets.tables.param_table import ParamTable
+from src.widgets import CellWidget, DataTable, ParamTable, TableWidgetItem
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(

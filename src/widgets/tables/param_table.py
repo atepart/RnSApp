@@ -1,10 +1,10 @@
 from PySide6 import QtWidgets
 
-from constants import ParamTableColumns
-from store import Item
-from widgets.delegates import RoundedDelegate
-from widgets.tables.item import TableWidgetItem
-from widgets.tables.mixins import TableMixin
+from src.constants import ParamTableColumns
+from src.store import Item
+from src.widgets.delegates import RoundedDelegate
+from src.widgets.tables.item import TableWidgetItem
+from src.widgets.tables.mixins import TableMixin
 
 
 class ParamTable(TableMixin, QtWidgets.QTableWidget):
