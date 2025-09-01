@@ -9,9 +9,9 @@ pip==25.2
 pyinstaller==6.15.0
 pyinstaller-hooks-contrib==2025.8
 pyqtgraph==0.13.7
-pyside6==6.9.1
-pyside6-addons==6.9.1
-pyside6-essentials==6.9.1
-pyside6-qtads==4.4.0.2
+PySide6==6.8.2.1
+PySide6-QtAds==4.3.1.4
+PySide6_Addons==6.8.2.1
+PySide6_Essentials==6.8.2.1
 setuptools==80.9.0
-shiboken6==6.9.1
+shiboken6==6.8.2.1
