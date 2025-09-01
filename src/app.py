@@ -1,6 +1,5 @@
 import logging
 import re
-import sys
 
 import numpy as np
 import openpyxl
@@ -26,6 +25,8 @@ from src.utils import (
     linear_fit,
 )
 from src.widgets import CellWidget, DataTable, ParamTable, TableWidgetItem
+
+logger = logging.getLogger(__name__)
 
 
 class RnSApp(QtWidgets.QWidget):
