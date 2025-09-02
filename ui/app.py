@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtWidgets
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QIcon
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
 from application.calculations import CalculationService
@@ -23,7 +23,6 @@ class RnSApp(QtWidgets.QMainWindow):
         self.setGeometry(100, 100, 1400, 900)
 
         self.setWindowIcon(QIcon("./assets/rns-logo-sm.png"))
-        self._setup_menu()
         self.data_table_label = QtWidgets.QLabel("Таблица с данными", self)
         self.data_table = DataTable(rows=50)
 
@@ -197,35 +196,6 @@ class RnSApp(QtWidgets.QMainWindow):
         )
         self.plot_service = PlotService(self.plot, self.data_table, self.param_table)
         self.plot_service.prepare_plot()
-
-    def _setup_menu(self):
-        menubar = self.menuBar()
-        view_menu = menubar.addMenu("Вид")
-        # Diagnostics
-        self.act_dump = QAction("Диагностика классов доков", self)
-        self.act_dump.triggered.connect(self.dump_dock_classes)
-        view_menu.addAction(self.act_dump)
-
-    def apply_theme(self, dark: bool = False):
-        # Always apply light theme
-        path = "ui/styles/light.qss"
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                QtWidgets.QApplication.instance().setStyleSheet(f.read())
-        except Exception:
-            pass
-        # Also apply theme to plot widget (pyqtgraph is not QSS-driven)
-        with contextlib.suppress(Exception):
-            self.plot_service.apply_theme(False)
-
-    def dump_dock_classes(self):
-        try:
-            widgets = self.dock_manager.findChildren(QtWidgets.QWidget)
-            names = sorted({w.metaObject().className() for w in widgets})
-            with open("debug.log", "w", encoding="utf-8") as f:
-                f.write("\n".join(names))
-        except Exception:
-            pass
 
     def calculate_means(self):
         rns_list = []
