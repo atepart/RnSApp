@@ -4,19 +4,18 @@ from typing import List, Tuple
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
 
-from src.constants import DataTableColumns, ParamTableColumns
-from src.store import InitialDataItem, InitialDataItemList
+from domain.constants import DataTableColumns, ParamTableColumns
+from domain.models import InitialDataItem, InitialDataItemList
+from domain.ports import CellRepository
 
 
 def save_cells_to_xlsx(
-    file_name: str, cell_grid_values: List[Tuple[str, str, str]], store, data_headers, results_headers
+    file_name: str,
+    cell_grid_values: List[Tuple[str, str, str]],
+    repo: CellRepository,
+    data_headers,
+    results_headers,
 ):
-    """Save current cells grid summary and stored data/results to XLSX.
-
-    cell_grid_values: list of tuples (name, drift_text, rns_text) length 16
-    store: Store class (with .data iterable)
-    data_headers, results_headers: headers for sheets
-    """
     wb = openpyxl.Workbook()
     ws_cells = wb.active
     ws_cells.title = "Cells data"
@@ -43,15 +42,13 @@ def save_cells_to_xlsx(
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
 
-    # widen columns / set row height
     for col in ws_cells.columns:
         column = col[0].column_letter
         ws_cells.column_dimensions[column].width = 12
     for row in ws_cells.rows:
         ws_cells.row_dimensions[row[0].row].height = 21
 
-    # Save all stored data/result sheets
-    for cell_data in store.data:
+    for cell_data in repo:
         ws_data = wb.create_sheet(f"Data №{cell_data.cell} {cell_data.name}")
         ws_data.append(data_headers)
         for dat in cell_data.initial_data:
@@ -68,12 +65,6 @@ def save_cells_to_xlsx(
 
 
 def load_cells_from_xlsx(file_name: str):
-    """Load cell items from XLSX.
-
-    Returns: (items, errors)
-     - items: list of dicts for Store.update_or_create_item
-     - errors: list of human-readable error strings
-    """
     wb = openpyxl.load_workbook(file_name)
     data_sheet_names = [sh for sh in wb.sheetnames if sh.startswith("Data №")]
     if not len(data_sheet_names):

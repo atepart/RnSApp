@@ -1,9 +1,9 @@
 import numpy as np
 from PySide6 import QtWidgets
 
-from src.constants import BLACK, RNS_ERROR_COLOR, WHITE, DataTableColumns, ParamTableColumns
-from src.errors import ListsNotSameLength
-from src.utils import (
+from domain.constants import BLACK, RNS_ERROR_COLOR, WHITE, DataTableColumns, ParamTableColumns
+from domain.errors import ListsNotSameLength
+from domain.utils import (
     calculate_drift,
     calculate_drift_per_sample,
     calculate_rn_sqrt,
@@ -15,19 +15,16 @@ from src.utils import (
     drop_nans,
     linear_fit,
 )
-from src.widgets import TableWidgetItem
+from ui.widgets import TableWidgetItem
 
 
 class CalculationService:
-    """Encapsulates calculation flows to keep the widget lean."""
-
     def __init__(self, data_table, param_table, rn_consistent_widget, allowed_error_widget) -> None:
         self.data_table = data_table
         self.param_table = param_table
         self.rn_consistent_widget = rn_consistent_widget
         self.allowed_error_widget = allowed_error_widget
 
-    # High-level orchestration
     def calculate_results(self):
         self.data_table.clear_calculations()
         if not self.calculate_rn05():
@@ -40,9 +37,7 @@ class CalculationService:
             return False
         return True
 
-    # Individual steps
     def calculate_rn05(self):
-        """Compute Rn^-0.5 for each selected row."""
         for row in range(self.data_table.rowCount()):
             resistance = self.data_table.get_column_value(row, DataTableColumns.RESISTANCE)
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
@@ -53,7 +48,6 @@ class CalculationService:
         return True
 
     def calculate_main_params(self):
-        """Compute slope/intercept, drift and RnS for current selection."""
         diameter_list = self.data_table.get_column_values(DataTableColumns.DIAMETER)
         rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN_SQRT)
         try:
@@ -67,7 +61,6 @@ class CalculationService:
             return False
 
         slope, intercept = linear_fit(diameter_list, rn_sqrt_list)
-
         self.param_table.setItem(0, ParamTableColumns.SLOPE.index, TableWidgetItem(str(slope)))
         self.param_table.setItem(0, ParamTableColumns.INTERCEPT.index, TableWidgetItem(str(intercept)))
 
@@ -79,7 +72,6 @@ class CalculationService:
         return True
 
     def calculate_error_params(self):
-        """Compute RnS/Drift error metrics and color rows by allowed error."""
         rns = self.param_table.get_column_value(0, ParamTableColumns.RNS)
         rns_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.RNS) if v], dtype=float)
 
@@ -126,7 +118,6 @@ class CalculationService:
         return True
 
     def calculate_rns_drift_square_per_sample(self):
-        """Per-row RnS/Drift/Square using computed mean values."""
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
         if not drift:
             QtWidgets.QMessageBox.warning(None, "Не корректные данные!", "Не вычислен уход!")

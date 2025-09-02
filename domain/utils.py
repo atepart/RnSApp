@@ -4,8 +4,6 @@ from .errors import ListsNotSameLength
 
 
 def linear_fit(x, y):
-    """Расчет линейной аппроксимации"""
-
     def mean(xs):
         return sum(xs) / len(xs)
 
@@ -33,12 +31,10 @@ def linear_fit(x, y):
 
     slope = r * (std(y, m_y) / std(x, m_x))
     intercept = m_y - slope * m_x
-
     return slope, intercept
 
 
 def linear(x: float, b: float, a: float):
-    """Линейная функция"""
     return x * b + a
 
 
@@ -48,49 +44,37 @@ def drop_nans(arr1: list, arr2: list):
     return np.array([arr for arr in np.array([arr1, arr2]).T if all(arr)], dtype=float).T
 
 
-# Расчетные функции
-
-
 def calculate_drift(slope: float, intercept: float):
-    """Расчет ухода для всех образцов"""
     return -intercept / slope
 
 
 def calculate_drift_per_sample(diameter: float, resistance: float, rns: float, rn_persistent: float):
-    """Расчет ухода для одного образца"""
     return diameter - np.sqrt((4 * rns / (resistance + rn_persistent)) / np.pi)
 
 
 def calculate_rns(slope: float):
-    """Расчет RnS для набора образцов"""
     return np.pi * 0.25 / (slope**2)
 
 
 def calculate_rns_per_sample(resistance: float, diameter: float, drift: float, rn_persistent: float):
-    """Расчет RnS для одного образца"""
     return (resistance + rn_persistent) * 0.25 * np.pi * (diameter - drift) ** 2
 
 
 def calculate_rn_sqrt(resistance: float, rn_consistent: float):
-    """Расчет Rn^-0.5"""
     return 1 / np.sqrt(resistance + rn_consistent)
 
 
 def calculate_square(diameter: float, drift: float):
-    """Расчет площади"""
     return (diameter - drift) ** 2 * np.pi / 4
 
 
 def calculate_rns_error_per_sample(rns_i: float, rns: float):
-    """Расчет ошибки RnS для каждого образца"""
     return np.abs(rns_i - rns)
 
 
 def calculate_allowed_rns_error(rns_error: float, allowed_error: float):
-    """Расчет допустимой ошибки RnS"""
     return rns_error * (1 + allowed_error)
 
 
 def calculate_rns_error_diff(rns_error_per_sample: float, rns_error: float, allowed_error: float):
-    """Проверка допустимости ошибки RnS"""
     return rns_error_per_sample - calculate_allowed_rns_error(rns_error=rns_error, allowed_error=allowed_error)

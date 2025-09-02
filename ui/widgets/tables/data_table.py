@@ -6,11 +6,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QHeaderView
 
-from src.constants import DataTableColumns
-from src.store import InitialDataItem
-from src.widgets.delegates import RoundedDelegate
-from src.widgets.tables.item import TableWidgetItem
-from src.widgets.tables.mixins import TableMixin
+from domain.constants import DataTableColumns
+from domain.models import InitialDataItem
+from ui.widgets.delegates import RoundedDelegate
+from ui.widgets.tables.item import TableWidgetItem
+from ui.widgets.tables.mixins import TableMixin
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,9 @@ class Header(QHeaderView):
 
     def on_state_changed(self, state):
         for row in range(self.parent().rowCount()):
-            item = self.parent().cellWidget(row, DataTableColumns.SELECT.index)
-            if isinstance(item, QtWidgets.QCheckBox):
-                item.setChecked(state)
+            cb = self.parent().get_row_checkbox(row)
+            if cb is not None:
+                cb.setChecked(state)
 
     def paintSection(self, painter, rect, logicalIndex):
         painter.save()
@@ -40,7 +40,6 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         super(DataTable, self).__init__(rows, len(DataTableColumns.get_all_names()))
         self.header = Header(self)
         self.setHorizontalHeader(self.header)
-        # Set Table headers
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
         self.setColumnWidth(DataTableColumns.NAME.index, 160)
         self.setColumnWidth(DataTableColumns.RESISTANCE.index, 160)
@@ -53,18 +52,13 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
         self.header.setSectionResizeMode(DataTableColumns.SQUARE.index, QHeaderView.ResizeMode.ResizeToContents)
 
-        # Remove vertical Table headers
         self.verticalHeader().setVisible(False)
-
-        # Set Table grid
         self.setShowGrid(True)
         self.setGridStyle(QtCore.Qt.PenStyle.SolidLine)
 
-        # Set default Numbers
         self.set_default_numbers()
         self.set_default_checks()
 
-        # Set columns RnS, Rn, Drift, Square as read-only
         self.set_read_only_columns(
             [
                 DataTableColumns.RNS.index,
@@ -79,44 +73,50 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(DataTableColumns.SQUARE.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(DataTableColumns.RN_SQRT.index, RoundedDelegate(rounded=2, parent=self))
 
-        # hide columns DRIFT, RnS Error
         self.setColumnHidden(DataTableColumns.DRIFT.index, True)
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
 
         self.itemChanged.connect(self.on_item_changed)
-
         self.clear_all()
 
     def on_item_changed(self, item):
         if item.column() in (DataTableColumns.DIAMETER.index, DataTableColumns.RESISTANCE.index):
             row = item.row()
-            checkbox = self.cellWidget(row, DataTableColumns.SELECT.index)
-            checkbox.setChecked(bool(item.text()))
+            cb = self.get_row_checkbox(row)
+            if cb:
+                cb.setChecked(bool(item.text()))
 
     def set_default_numbers(self):
         for i in range(self.rowCount()):
             item = TableWidgetItem(str(i + 1))
-            self.setItem(
-                i,
-                DataTableColumns.NUMBER.index,
-                item,
-            )
+            self.setItem(i, DataTableColumns.NUMBER.index, item)
 
     def set_default_checks(self):
         for i in range(self.rowCount()):
             checkbox = QtWidgets.QCheckBox()
-            self.setCellWidget(i, DataTableColumns.SELECT.index, checkbox)
+            container = QtWidgets.QWidget()
+            lay = QtWidgets.QHBoxLayout(container)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            lay.addWidget(checkbox)
+            self.setCellWidget(i, DataTableColumns.SELECT.index, container)
             self.setItem(i, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
 
+    def get_row_checkbox(self, row: int) -> QtWidgets.QCheckBox | None:
+        w = self.cellWidget(row, DataTableColumns.SELECT.index)
+        if isinstance(w, QtWidgets.QCheckBox):
+            return w
+        if isinstance(w, QtWidgets.QWidget):
+            cbs = w.findChildren(QtWidgets.QCheckBox)
+            return cbs[0] if cbs else None
+        return None
+
     def keyPressEvent(self, event):
-        # На нажатие Enter/Return переход на следующую строку
         if event.key() in (QtCore.Qt.Key.Key_Enter, QtCore.Qt.Key.Key_Return):
             row = self.currentRow()
             col = self.currentColumn()
             if row < self.rowCount() - 1:
                 self.setCurrentCell(row + 1, col)
-
-        # На нажатие Delete/Backspace удаление выбранных значений
         elif event.key() in (QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace):
             selected_items = self.selectedItems()
             if selected_items:
@@ -126,13 +126,10 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                         DataTableColumns.RN_SQRT.index,
                         DataTableColumns.DRIFT.index,
                         DataTableColumns.SQUARE.index,
-                    ]:  # Нельзя изменить Rn, RnS, Drift
+                    ]:
                         self.setItem(item.row(), item.column(), TableWidgetItem(""))
-
-        # Ивент вставки ctrl-v
         elif event.matches(QtGui.QKeySequence.StandardKey.Paste):
             self.paste_data()
-        # Ивент копирования ctrl-c
         elif event.matches(QtGui.QKeySequence.StandardKey.Copy):
             self.copy_data()
         else:
@@ -141,7 +138,6 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
     def copy_data(self):
         clipboard = QtWidgets.QApplication.clipboard()
         copied_cells = sorted(self.selectedIndexes())
-
         copy_text = ""
         max_column = copied_cells[-1].column()
         for c in copied_cells:
@@ -163,7 +159,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             DataTableColumns.RESISTANCE.index,
             DataTableColumns.NUMBER.index,
             DataTableColumns.NAME.index,
-        ]:  # Можно вставлять только в Number, Name, Diameter, Resistance
+        ]:
             return
         for i, row in enumerate(rows):
             values = row.split("\t")
@@ -171,7 +167,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 if start_col in [
                     DataTableColumns.DIAMETER.index,
                     DataTableColumns.RESISTANCE.index,
-                ]:  # Для данных колонок нужны числа float
+                ]:
                     value = value.replace(",", ".")
                 item = TableWidgetItem(value)
                 self.setItem(start_row + i, start_col + j, item)
@@ -179,7 +175,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
     def get_column_values(self, column: DataTableColumns):
         values = []
         for row in range(self.rowCount()):
-            if not self.cellWidget(row, DataTableColumns.SELECT.index).isChecked():
+            cb = self.get_row_checkbox(row)
+            if not (cb and cb.isChecked()):
                 continue
             value = self.item(row, column.index)
             try:
@@ -189,7 +186,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         return values
 
     def get_column_value(self, row: int, column: DataTableColumns):
-        if not self.cellWidget(row, DataTableColumns.SELECT.index).isChecked():
+        cb = self.get_row_checkbox(row)
+        if not (cb and cb.isChecked()):
             return None
         return super().get_column_value(row, column)
 
@@ -198,99 +196,46 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.itemChanged.disconnect()
 
         for row in range(self.rowCount()):
-            self.setItem(
-                row,
-                DataTableColumns.NAME.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Name column
-            self.setItem(
-                row,
-                DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear RnS column
-            self.setItem(
-                row,
-                DataTableColumns.DRIFT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Drift column
-            self.setItem(
-                row,
-                DataTableColumns.DIAMETER.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Diameter column
-            self.setItem(
-                row,
-                DataTableColumns.RESISTANCE.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Resistance column
-            self.setItem(
-                row,
-                DataTableColumns.RN_SQRT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Rn^-0.5 column
-            self.setItem(
-                row,
-                DataTableColumns.NUMBER.index,
-                TableWidgetItem(str(row + 1)),
-            )  # Clear Number column
+            self.setItem(row, DataTableColumns.NAME.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DIAMETER.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RESISTANCE.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.NUMBER.index, TableWidgetItem(str(row + 1)))
             checkbox = QtWidgets.QCheckBox()
-            self.setCellWidget(row, DataTableColumns.SELECT.index, checkbox)
+            container = QtWidgets.QWidget()
+            lay = QtWidgets.QHBoxLayout(container)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            lay.addWidget(checkbox)
+            self.setCellWidget(row, DataTableColumns.SELECT.index, container)
             self.setItem(row, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))  # Clear Square
+            self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))
         self.header.checkbox.setChecked(True)
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_rn(self):
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-
         for row in range(self.rowCount()):
-            self.setItem(
-                row,
-                DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear RnS column
-            self.setItem(
-                row,
-                DataTableColumns.DRIFT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Drift column
-            self.setItem(
-                row,
-                DataTableColumns.RESISTANCE.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Resistance column
-            self.setItem(
-                row,
-                DataTableColumns.RN_SQRT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Rn^-0.5 column
-            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
+            self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RESISTANCE.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_calculations(self):
         for row in range(self.rowCount()):
-            self.setItem(
-                row,
-                DataTableColumns.RNS.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear RnS column
-            self.setItem(
-                row,
-                DataTableColumns.DRIFT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Drift column
-            self.setItem(
-                row,
-                DataTableColumns.RN_SQRT.index,
-                QtWidgets.QTableWidgetItem(""),
-            )  # Clear Rn^-0.5 column
-            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))  # Clear Square
+            self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))
 
     def color_row(self, row, background_color, text_color):
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-
         for col in range(self.columnCount()):
             item = self.item(row, col)
             if item:
@@ -303,8 +248,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         for row in range(self.rowCount()):
             for col in range(self.columnCount()):
                 if col == DataTableColumns.SELECT.index:
-                    cell_widget = self.cellWidget(row, col)
-                    value = "True" if cell_widget.isChecked() else ""
+                    cb = self.get_row_checkbox(row)
+                    value = "True" if (cb and cb.isChecked()) else ""
                 else:
                     item = self.item(row, col)
                     if not item:
@@ -312,7 +257,6 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                         logger.debug(f"DataTable item row={row} col={col} is None")
                     else:
                         value = DataTableColumns.get_by_index(col).dtype(item.text()) if item.text() else ""
-
                 data.append(InitialDataItem(value=value, row=row, col=col))
         return data
 
@@ -320,16 +264,24 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.clear_all()
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
-
         for item in data:
             if item["col"] == DataTableColumns.SELECT.index:
                 checkbox = QtWidgets.QCheckBox()
                 checkbox.setChecked(item["value"] == "True")
-                self.setCellWidget(item["row"], DataTableColumns.SELECT.index, checkbox)
+                container = QtWidgets.QWidget()
+                lay = QtWidgets.QHBoxLayout(container)
+                lay.setContentsMargins(0, 0, 0, 0)
+                lay.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+                lay.addWidget(checkbox)
+                self.setCellWidget(item["row"], DataTableColumns.SELECT.index, container)
             else:
                 self.setItem(item["row"], item["col"], TableWidgetItem(f"{item['value']}"))
         self.itemChanged.connect(self.on_item_changed)
 
-        if not any(self.cellWidget(row, DataTableColumns.SELECT.index).isChecked() for row in range(self.rowCount())):
+        if not any(
+            (self.get_row_checkbox(row) and self.get_row_checkbox(row).isChecked()) for row in range(self.rowCount())
+        ):
             for row in range(self.rowCount()):
-                self.cellWidget(row, DataTableColumns.SELECT.index).setChecked(True)
+                cb = self.get_row_checkbox(row)
+                if cb:
+                    cb.setChecked(True)

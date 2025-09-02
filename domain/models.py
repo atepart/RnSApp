@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 
 class BaseList(list):
@@ -60,38 +60,30 @@ class Item:
         self,
         cell: int,
         name: str,
-        # Исходные данные
-        diameter_list: List[float],
-        rn_sqrt_list: List[float],
-        # Расчетные данные
+        diameter_list,
+        rn_sqrt_list,
         slope: float,
         intercept: float,
         drift: float,
         rns: float,
         drift_error: float,
         rns_error: float,
-        # Исходная таблица
-        initial_data: InitialDataItemList[InitialDataItem],
-        # Мета
+        initial_data: InitialDataItemList,
         rn_consistent: float = 0,
         allowed_error: float = 0,
     ) -> None:
         self.cell = cell
         self.name = name
-
         self.diameter_list = diameter_list
         self.rn_sqrt_list = rn_sqrt_list
-
         self.slope = slope
         self.intercept = intercept
         self.drift = drift
         self.rns = rns
         self.drift_error = drift_error
         self.rns_error = rns_error
-
         self.rn_consistent = rn_consistent
         self.allowed_error = allowed_error
-
         self.initial_data = initial_data
         self.is_plot = False
 
@@ -99,23 +91,3 @@ class Item:
 class ItemsList(BaseList):
     def get(self, **kwargs) -> Optional["Item"]:
         return super().get(**kwargs)
-
-
-class Store:
-    data: ItemsList[Item] = ItemsList()
-
-    @classmethod
-    def update_or_create_item(cls, cell: int, **kwargs) -> Item:
-        item = cls.data.get(cell=cell)
-        if item:
-            for k, v in kwargs.items():
-                setattr(item, k, v)
-        else:
-            item = Item(cell, **kwargs)
-            cls.data.append(item)
-
-        return item
-
-    @classmethod
-    def clear(cls):
-        cls.data = ItemsList()

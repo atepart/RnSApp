@@ -1,5 +1,5 @@
-from src.constants import TableColumns
-from src.widgets.delegates import ReadOnlyDelegate
+from domain.constants import TableColumns
+from ui.widgets.delegates import ReadOnlyDelegate
 
 
 class TableMixin:

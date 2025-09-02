@@ -1,10 +1,10 @@
 from PySide6 import QtWidgets
 
-from src.constants import ParamTableColumns
-from src.store import Item
-from src.widgets.delegates import RoundedDelegate
-from src.widgets.tables.item import TableWidgetItem
-from src.widgets.tables.mixins import TableMixin
+from domain.constants import ParamTableColumns
+from domain.models import Item
+from ui.widgets.delegates import RoundedDelegate
+from ui.widgets.tables.item import TableWidgetItem
+from ui.widgets.tables.mixins import TableMixin
 
 
 class ParamTable(TableMixin, QtWidgets.QTableWidget):
@@ -13,10 +13,7 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
 
         self.setHorizontalHeaderLabels(ParamTableColumns.get_all_names())
         self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-
         self.verticalHeader().setVisible(False)
-
-        # self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Preferred)
         self.setFixedHeight(self.rowHeight(0) + self.horizontalHeader().height())
 
         self.set_read_only_columns(
@@ -37,7 +34,6 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
 
-        # hide column DRIFT_ERROR, RN_CONSISTENT, ALLOWED_ERROR
         self.setColumnHidden(ParamTableColumns.DRIFT_ERROR.index, True)
         self.setColumnHidden(ParamTableColumns.RN_CONSISTENT.index, True)
         self.setColumnHidden(ParamTableColumns.ALLOWED_ERROR.index, True)

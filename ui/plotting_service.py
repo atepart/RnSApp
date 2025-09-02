@@ -1,9 +1,11 @@
+import contextlib
+
 import numpy as np
 import pyqtgraph as pg
 
-from src.constants import PLOT_COLORS, ParamTableColumns
-from src.errors import ListsNotSameLength
-from src.utils import drop_nans, linear
+from domain.constants import PLOT_COLORS, DataTableColumns, ParamTableColumns
+from domain.errors import ListsNotSameLength
+from domain.utils import drop_nans, linear
 
 
 class PlotService:
@@ -22,14 +24,29 @@ class PlotService:
         self.plot.addLegend()
         self.plot.showGrid(x=True, y=True)
 
+    def apply_theme(self, dark: bool):
+        bg = "#121212" if dark else "#FFFFFF"
+        fg = "#E0E0E0" if dark else "#1F1F1F"
+        self.plot.setBackground(bg)
+        plot_item = self.plot.getPlotItem()
+        for name in ("left", "bottom", "right", "top"):
+            axis = plot_item.getAxis(name)
+            if axis is not None:
+                axis.setPen(fg)
+                with contextlib.suppress(Exception):
+                    axis.setTextPen(fg)
+
+        # slightly adjust grid visibility
+        with contextlib.suppress(Exception):
+            plot_item.showGrid(x=True, y=True, alpha=0.3 if dark else 0.25)
+
     def plot_current_data(self):
-        from src.constants import DataTableColumns  # local import to avoid cycles
+        from domain.constants import DataTableColumns  # avoid cycles
 
         diameter_list = self.data_table.get_column_values(DataTableColumns.DIAMETER)
         rn_sqrt_list = self.data_table.get_column_values(DataTableColumns.RN_SQRT)
         try:
             diameter_list, rn_sqrt_list = drop_nans(diameter_list, rn_sqrt_list)
-            # If no valid points, stop updating curves
             if diameter_list.size == 0:
                 return False
             diameter_list, rn_sqrt_list = np.array(
@@ -52,23 +69,25 @@ class PlotService:
         else:
             self.plot.plot(diameter_list, rn_sqrt_list, name="Data", symbolSize=6, symbolBrush="#000000")
 
-        # Skip fit if parameters are missing
         if drift is None or slope is None or intercept is None:
             return True
 
-        if np.min(diameter_list) > drift:
-            diameter_list.insert(0, drift)
-        if np.max(diameter_list) < drift:
-            diameter_list.append(drift)
-        y_appr = np.vectorize(lambda x: linear(x, slope, intercept))(diameter_list)
+        fit_x = list(diameter_list)
+        if len(fit_x) == 0:
+            return True
+        if np.min(fit_x) > drift:
+            fit_x.insert(0, drift)
+        if np.max(fit_x) < drift:
+            fit_x.append(drift)
+        y_appr = np.vectorize(lambda x: linear(x, slope, intercept))(fit_x)
 
-        if items_fit:
-            items_fit[0].setData(diameter_list, y_appr)
+        if len(items_fit):
+            items_fit[0].setData(fit_x, y_appr)
             return None
         else:
             pen2 = pg.mkPen(color="#000000", width=3)
             self.plot.plot(
-                diameter_list,
+                fit_x,
                 y_appr,
                 name="Fit",
                 pen=pen2,
@@ -77,11 +96,26 @@ class PlotService:
             )
             return None
 
-    def plot_cell(self, cell: int, store):
-        item = store.data.get(cell=cell)
+    def plot_cell(self, cell: int, repo):
+        item = repo.get(cell=cell)
         if not item:
             return
         diameter, rn_sqrt = drop_nans(item.diameter_list, item.rn_sqrt_list)
+        # Fallback: rebuild series from initial_data selection if stored lists are empty
+        if diameter.size == 0:
+            try:
+                selected = {
+                    v.row for v in item.initial_data.filter(col=DataTableColumns.SELECT.index) if v.value == "True"
+                }
+                diam_by_row = {v.row: v.value for v in item.initial_data.filter(col=DataTableColumns.DIAMETER.index)}
+                rn_sqrt_by_row = {v.row: v.value for v in item.initial_data.filter(col=DataTableColumns.RN_SQRT.index)}
+                diam_list = [float(diam_by_row[r]) if diam_by_row.get(r) not in ("", None) else None for r in selected]
+                rn_list = [
+                    float(rn_sqrt_by_row[r]) if rn_sqrt_by_row.get(r) not in ("", None) else None for r in selected
+                ]
+                diameter, rn_sqrt = drop_nans(diam_list, rn_list)
+            except Exception:
+                return
         if diameter.size == 0:
             return
         diameter_list = diameter.tolist()
@@ -102,7 +136,7 @@ class PlotService:
         )
 
     def remove_cell_plot(self, cell: int, store):
-        cell_data = store.data.get(cell=cell)
+        cell_data = store.get(cell=cell)
         plotItem = self.plot.getPlotItem()
         items_to_remove = [item for item in plotItem.items if item.name() == (cell_data.name if cell_data else None)]
         for item in items_to_remove:
