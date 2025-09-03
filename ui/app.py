@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtWidgets
+from PySide6.QtCore import QSettings
 from PySide6.QtGui import QIcon
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
@@ -196,6 +197,43 @@ class RnSApp(QtWidgets.QMainWindow):
         )
         self.plot_service = PlotService(self.plot, self.data_table, self.param_table)
         self.plot_service.prepare_plot()
+
+        # Restore persisted layout and geometry if available
+        with contextlib.suppress(Exception):
+            self.restore_settings()
+
+    def save_settings(self):
+        settings = QSettings()
+        settings.beginGroup("MainWindow")
+        settings.setValue("geometry", self.saveGeometry())
+        settings.endGroup()
+
+        settings.beginGroup("DockManager")
+        with contextlib.suppress(Exception):
+            settings.setValue("state", self.dock_manager.saveState())
+
+        settings.endGroup()
+
+    def restore_settings(self):
+        settings = QSettings()
+        settings.beginGroup("MainWindow")
+        geometry = settings.value("geometry")
+        if geometry:
+            with contextlib.suppress(Exception):
+                self.restoreGeometry(geometry)
+        settings.endGroup()
+
+        settings.beginGroup("DockManager")
+        state = settings.value("state")
+        if state:
+            with contextlib.suppress(Exception):
+                self.dock_manager.restoreState(state)
+        settings.endGroup()
+
+    def closeEvent(self, event):
+        with contextlib.suppress(Exception):
+            self.save_settings()
+        super().closeEvent(event)
 
     def calculate_means(self):
         rns_list = []
