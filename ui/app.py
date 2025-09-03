@@ -24,15 +24,16 @@ class RnSApp(QtWidgets.QMainWindow):
         self.setGeometry(100, 100, 1400, 900)
 
         self.setWindowIcon(QIcon("./assets/rns-logo-sm.png"))
-        self.data_table_label = QtWidgets.QLabel("Таблица с данными", self)
+        # Табличка с данными без заголовка-лейбла
         self.data_table = DataTable(rows=50)
 
         self.plot = pg.PlotWidget()
 
-        self.param_table_label = QtWidgets.QLabel("Таблица с расчетом", self)
+        # Таблица с расчетом без заголовка-лейбла
         self.param_table = ParamTable()
 
-        self.actions_group = QtWidgets.QGroupBox("Действия")
+        # Контейнер действий без рамки группы
+        self.actions_group = QtWidgets.QWidget()
         self.actions_layout = QtWidgets.QHBoxLayout()
 
         self.result_button = QtWidgets.QPushButton("Расcчитать")
@@ -52,25 +53,19 @@ class RnSApp(QtWidgets.QMainWindow):
         self.actions_layout.addWidget(self.clean_all_button)
         self.actions_group.setLayout(self.actions_layout)
 
-        self.rn_consistent_group = QtWidgets.QGroupBox("Последовательное Rn (Ом)")
-        self.rn_consistent_layout = QtWidgets.QHBoxLayout()
+        # Поля параметров ввода как аккуратные лейблы + спинбоксы
         self.rn_consistent = QtWidgets.QDoubleSpinBox(self)
         self.rn_consistent.setRange(0, 100)
         self.rn_consistent.setDecimals(2)
         self.rn_consistent.setValue(0)
-        self.rn_consistent_layout.addWidget(self.rn_consistent)
-        self.rn_consistent_group.setLayout(self.rn_consistent_layout)
 
-        self.allowed_error_group = QtWidgets.QGroupBox("Допустимое отклонение (%)")
-        self.allowed_error_layout = QtWidgets.QHBoxLayout()
         self.allowed_error = QtWidgets.QDoubleSpinBox(self)
         self.allowed_error.setRange(0, 100)
         self.allowed_error.setDecimals(2)
         self.allowed_error.setValue(0)
-        self.allowed_error_layout.addWidget(self.allowed_error)
-        self.allowed_error_group.setLayout(self.allowed_error_layout)
 
-        self.cell_group = QtWidgets.QGroupBox("Запись")
+        # Контейнер без заголовка; сами ячейки остаются группами
+        self.cell_group = QtWidgets.QWidget()
         self.cell_v_layout = QtWidgets.QVBoxLayout()
         self.cell_h_layout = QtWidgets.QHBoxLayout()
         self.cell_grid_layout = QtWidgets.QGridLayout()
@@ -116,24 +111,19 @@ class RnSApp(QtWidgets.QMainWindow):
         data_layout = QtWidgets.QVBoxLayout()
         data_layout.setContentsMargins(6, 6, 6, 6)
         data_layout.setSpacing(6)
-        data_layout.addWidget(self.data_table_label)
         data_layout.addWidget(self.data_table)
         data_container.setLayout(data_layout)
         data_dock = CDockWidget("Данные")
         data_dock.setWidget(data_container)
 
-        params_group = QtWidgets.QGroupBox("Параметры")
-        params_group_layout = QtWidgets.QHBoxLayout()
-        params_group_layout.addWidget(self.rn_consistent_group)
-        params_group_layout.addWidget(self.allowed_error_group)
-        params_group.setLayout(params_group_layout)
+        # Параметры ввода: компактные лейблы слева, поля справа
         params_container = QtWidgets.QWidget(self)
-        params_container_layout = QtWidgets.QVBoxLayout()
-        params_container_layout.setContentsMargins(6, 6, 6, 6)
-        params_container_layout.setSpacing(6)
-        params_container_layout.addWidget(params_group)
-        params_container_layout.addStretch(1)
-        params_container.setLayout(params_container_layout)
+        params_form = QtWidgets.QFormLayout()
+        params_form.setContentsMargins(6, 6, 6, 6)
+        params_form.setSpacing(6)
+        params_form.addRow(QtWidgets.QLabel("Последовательное Rn (Ом):"), self.rn_consistent)
+        params_form.addRow(QtWidgets.QLabel("Допустимое отклонение (%):"), self.allowed_error)
+        params_container.setLayout(params_form)
         params_dock = CDockWidget("Параметры ввода")
         params_dock.setWidget(params_container)
 
@@ -151,7 +141,6 @@ class RnSApp(QtWidgets.QMainWindow):
         calc_layout = QtWidgets.QVBoxLayout()
         calc_layout.setContentsMargins(6, 6, 6, 6)
         calc_layout.setSpacing(6)
-        calc_layout.addWidget(self.param_table_label)
         calc_layout.addWidget(self.param_table)
         calc_layout.addStretch(1)
         calc_container.setLayout(calc_layout)
