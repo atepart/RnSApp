@@ -5,7 +5,7 @@ from domain.constants import BLACK, RNS_ERROR_COLOR, WHITE, DataTableColumns, Pa
 from domain.errors import ListsNotSameLength
 from domain.utils import (
     calculate_drift,
-    calculate_drift_per_sample,
+    calculate_real_area,
     calculate_rn_sqrt,
     calculate_rns,
     calculate_rns_error_per_sample,
@@ -18,11 +18,21 @@ from ui.widgets import TableWidgetItem
 
 
 class CalculationService:
-    def __init__(self, data_table, param_table, rn_consistent_widget, allowed_error_widget) -> None:
+    def __init__(
+        self,
+        data_table,
+        param_table,
+        rn_consistent_widget,
+        allowed_error_widget,
+        s_custom1_widget=None,
+        s_custom2_widget=None,
+    ) -> None:
         self.data_table = data_table
         self.param_table = param_table
         self.rn_consistent_widget = rn_consistent_widget
         self.allowed_error_widget = allowed_error_widget
+        self.s_custom1_widget = s_custom1_widget
+        self.s_custom2_widget = s_custom2_widget
 
     def calculate_results(self):
         self.data_table.clear_calculations()
@@ -68,6 +78,27 @@ class CalculationService:
 
         rns = calculate_rns(slope)
         self.param_table.setItem(0, ParamTableColumns.RNS.index, TableWidgetItem(str(rns)))
+
+        # Real areas: for nominal 1 um^2 and custom S1, S2 if provided
+        try:
+            s_real_1 = calculate_real_area(area_nominal=1.0, drift=drift)
+            self.param_table.setItem(0, ParamTableColumns.S_REAL_1.index, TableWidgetItem(str(s_real_1)))
+        except Exception:
+            pass
+        try:
+            if self.s_custom1_widget is not None:
+                s_nom1 = float(self.s_custom1_widget.value())
+                s_real_c1 = calculate_real_area(area_nominal=s_nom1, drift=drift)
+                self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM1.index, TableWidgetItem(str(s_real_c1)))
+        except Exception:
+            pass
+        try:
+            if self.s_custom2_widget is not None:
+                s_nom2 = float(self.s_custom2_widget.value())
+                s_real_c2 = calculate_real_area(area_nominal=s_nom2, drift=drift)
+                self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM2.index, TableWidgetItem(str(s_real_c2)))
+        except Exception:
+            pass
         return True
 
     def calculate_error_params(self):
@@ -146,11 +177,5 @@ class CalculationService:
             )
             self.data_table.setItem(row, DataTableColumns.RNS.index, TableWidgetItem(str(rns_value)))
 
-            drift_value = calculate_drift_per_sample(
-                diameter=diameter,
-                resistance=resistance,
-                rns=rns_mean,
-                rn_persistent=self.rn_consistent_widget.value(),
-            )
-            self.data_table.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(str(drift_value)))
+            # Per-sample drift is no longer calculated; drift is the same for all samples.
         return True

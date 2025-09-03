@@ -78,12 +78,12 @@ class CellWidget(QtWidgets.QGroupBox):
             self.checkbox.setVisible(True)
             self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
 
-    def buildGraph(self, state):
+    def buildGraph(self, state: int):
         cell_data = self.app.repo.get(cell=self.index)
         if cell_data is None and self.name.text():
             self.app.addCellData(cell=self.index, name=self.name.text())
             cell_data = self.app.repo.get(cell=self.index)
-        if state == QtCore.Qt.CheckState.Checked:
+        if state == QtCore.Qt.CheckState.Checked.value:
             self.app.plot_data(self.index)
             if cell_data:
                 cell_data.is_plot = True

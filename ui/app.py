@@ -5,7 +5,8 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtWidgets
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QApplication
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
 from application.calculations import CalculationService
@@ -47,6 +48,10 @@ class RnSApp(QtWidgets.QMainWindow):
         self.clean_all_button = QtWidgets.QPushButton("Очистить таблицы")
         self.clean_all_button.setToolTip("Очистить график и таблицы с даными и расчетом")
         self.clean_all_button.clicked.connect(self.clean_all)
+
+        # Make buttons expand to fill the bottom row
+        for btn in (self.result_button, self.clean_rn_button, self.clean_all_button):
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
 
         self.actions_layout.addWidget(self.result_button)
         self.actions_layout.addWidget(self.clean_rn_button)
@@ -113,29 +118,45 @@ class RnSApp(QtWidgets.QMainWindow):
         data_layout.setSpacing(6)
         data_layout.addWidget(self.data_table)
         data_container.setLayout(data_layout)
-        data_dock = CDockWidget("Данные")
-        data_dock.setWidget(data_container)
+        self.data_dock = CDockWidget("Данные")
+        self.data_dock.setWidget(data_container)
 
-        # Параметры ввода: компактные лейблы слева, поля справа
-        params_container = QtWidgets.QWidget(self)
-        params_form = QtWidgets.QFormLayout()
-        params_form.setContentsMargins(6, 6, 6, 6)
-        params_form.setSpacing(6)
-        params_form.addRow(QtWidgets.QLabel("Последовательное Rn (Ом):"), self.rn_consistent)
-        params_form.addRow(QtWidgets.QLabel("Допустимое отклонение (%):"), self.allowed_error)
-        params_container.setLayout(params_form)
-        params_dock = CDockWidget("Параметры ввода")
-        params_dock.setWidget(params_container)
+        # Объединенные параметры ввода + действия
+        # Inputs for custom nominal areas (um^2)
+        self.s_custom1 = QtWidgets.QDoubleSpinBox(self)
+        self.s_custom1.setDecimals(3)
+        self.s_custom1.setRange(0, 100000)
+        self.s_custom1.setValue(1.0)
+        self.s_custom2 = QtWidgets.QDoubleSpinBox(self)
+        self.s_custom2.setDecimals(3)
+        self.s_custom2.setRange(0, 100000)
+        self.s_custom2.setValue(1.0)
 
-        actions_container = QtWidgets.QWidget(self)
-        actions_container_layout = QtWidgets.QVBoxLayout()
-        actions_container_layout.setContentsMargins(6, 6, 6, 6)
-        actions_container_layout.setSpacing(6)
-        actions_container_layout.addWidget(self.actions_group)
-        actions_container_layout.addStretch(1)
-        actions_container.setLayout(actions_container_layout)
-        actions_dock = CDockWidget("Действия")
-        actions_dock.setWidget(actions_container)
+        inputs_container = QtWidgets.QWidget(self)
+        inputs_layout = QtWidgets.QVBoxLayout()
+        inputs_layout.setContentsMargins(6, 6, 6, 6)
+        inputs_layout.setSpacing(6)
+        # 2x2 grid of parameters: each field is label + widget
+        inputs_grid = QtWidgets.QGridLayout()
+        inputs_grid.setContentsMargins(0, 0, 0, 0)
+        inputs_grid.setHorizontalSpacing(12)
+        inputs_grid.setVerticalSpacing(6)
+        # Row 0
+        inputs_grid.addWidget(QtWidgets.QLabel("Последовательное Rn (Ом):"), 0, 0)
+        inputs_grid.addWidget(self.rn_consistent, 0, 1)
+        inputs_grid.addWidget(QtWidgets.QLabel("Допустимое отклонение (%):"), 0, 2)
+        inputs_grid.addWidget(self.allowed_error, 0, 3)
+        # Row 1
+        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S1 (мкм²):"), 1, 0)
+        inputs_grid.addWidget(self.s_custom1, 1, 1)
+        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S2 (мкм²):"), 1, 2)
+        inputs_grid.addWidget(self.s_custom2, 1, 3)
+        inputs_layout.addLayout(inputs_grid)
+        inputs_layout.addStretch(1)
+        inputs_layout.addWidget(self.actions_group)
+        inputs_container.setLayout(inputs_layout)
+        self.inputs_dock = CDockWidget("Действия")
+        self.inputs_dock.setWidget(inputs_container)
 
         calc_container = QtWidgets.QWidget(self)
         calc_layout = QtWidgets.QVBoxLayout()
@@ -144,11 +165,11 @@ class RnSApp(QtWidgets.QMainWindow):
         calc_layout.addWidget(self.param_table)
         calc_layout.addStretch(1)
         calc_container.setLayout(calc_layout)
-        calc_dock = CDockWidget("Расчет")
-        calc_dock.setWidget(calc_container)
+        self.calc_dock = CDockWidget("Расчет")
+        self.calc_dock.setWidget(calc_container)
 
-        plot_dock = CDockWidget("График")
-        plot_dock.setWidget(self.plot)
+        self.plot_dock = CDockWidget("График")
+        self.plot_dock.setWidget(self.plot)
 
         cells_container = QtWidgets.QWidget(self)
         cells_container_layout = QtWidgets.QVBoxLayout()
@@ -157,18 +178,17 @@ class RnSApp(QtWidgets.QMainWindow):
         cells_container_layout.addWidget(self.cell_group)
         cells_container_layout.addStretch(1)
         cells_container.setLayout(cells_container_layout)
-        cells_dock = CDockWidget("Запись")
-        cells_dock.setWidget(cells_container)
+        self.cells_dock = CDockWidget("Запись")
+        self.cells_dock.setWidget(cells_container)
 
-        left_area = self.dock_manager.addDockWidget(DockWidgetArea.LeftDockWidgetArea, data_dock)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, params_dock, left_area)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, actions_dock, left_area)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, calc_dock, left_area)
+        left_area = self.dock_manager.addDockWidget(DockWidgetArea.LeftDockWidgetArea, self.data_dock)
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.inputs_dock, left_area)
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.calc_dock, left_area)
 
-        right_area = self.dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, plot_dock)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, cells_dock, right_area)
+        right_area = self.dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, self.plot_dock)
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.cells_dock, right_area)
 
-        for dock in (data_dock, params_dock, actions_dock, calc_dock, plot_dock, cells_dock):
+        for dock in (self.data_dock, self.inputs_dock, self.calc_dock, self.plot_dock, self.cells_dock):
             try:
                 feats = dock.features()
                 feats &= ~CDockWidget.DockWidgetFeature.DockWidgetClosable
@@ -177,12 +197,26 @@ class RnSApp(QtWidgets.QMainWindow):
             except Exception:
                 pass
 
+        # Save default dock layout state for restoring on demand
+        with contextlib.suppress(Exception):
+            self.default_dock_state = self.dock_manager.saveState()
+
+        # Top toolbar with action to restore default layout
+        toolbar = QtWidgets.QToolBar("Вид")
+        self.addToolBar(toolbar)
+        act_restore = QAction("Восстановить виджеты", self)
+        act_restore.setToolTip("Построить расположение панелей по умолчанию")
+        act_restore.triggered.connect(self.restore_default_layout)
+        toolbar.addAction(act_restore)
+
         self.repo = repo or InMemoryCellRepository()
         self.calc = CalculationService(
             data_table=self.data_table,
             param_table=self.param_table,
             rn_consistent_widget=self.rn_consistent,
             allowed_error_widget=self.allowed_error,
+            s_custom1_widget=self.s_custom1,
+            s_custom2_widget=self.s_custom2,
         )
         self.plot_service = PlotService(self.plot, self.data_table, self.param_table)
         self.plot_service.prepare_plot()
@@ -190,6 +224,11 @@ class RnSApp(QtWidgets.QMainWindow):
         # Restore persisted layout and geometry if available
         with contextlib.suppress(Exception):
             self.restore_settings()
+        # Always ensure all docks are visible on startup
+        with contextlib.suppress(Exception):
+            for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
+                dock.setVisible(True)
+                dock.show()
 
     def save_settings(self):
         settings = QSettings()
@@ -219,9 +258,25 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.dock_manager.restoreState(state)
         settings.endGroup()
 
+    def restore_default_layout(self):
+        # Restore dock layout to the default captured state
+        with contextlib.suppress(Exception):
+            if hasattr(self, "default_dock_state") and self.default_dock_state:
+                self.dock_manager.restoreState(self.default_dock_state)
+        # Ensure all docks are visible
+        with contextlib.suppress(Exception):
+            for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
+                dock.setVisible(True)
+                dock.show()
+        # Persist current layout as the new state
+        with contextlib.suppress(Exception):
+            self.save_settings()
+
     def closeEvent(self, event):
         with contextlib.suppress(Exception):
             self.save_settings()
+        for window in QApplication.topLevelWidgets():
+            window.close()
         super().closeEvent(event)
 
     def calculate_means(self):
@@ -277,6 +332,9 @@ class RnSApp(QtWidgets.QMainWindow):
             initial_data=self.data_table.dump_data(),
             rn_consistent=self.rn_consistent.value(),
             allowed_error=self.allowed_error.value(),
+            s_real_1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_1),
+            s_real_custom1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM1),
+            s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
         )
         self.set_active_cell(cell)
 

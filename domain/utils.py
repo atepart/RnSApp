@@ -78,3 +78,12 @@ def calculate_allowed_rns_error(rns_error: float, allowed_error: float):
 
 def calculate_rns_error_diff(rns_error_per_sample: float, rns_error: float, allowed_error: float):
     return rns_error_per_sample - calculate_allowed_rns_error(rns_error=rns_error, allowed_error=allowed_error)
+
+
+def calculate_real_area(area_nominal: float, drift: float) -> float:
+    """Calculate real circular area for a nominal area with given drift.
+
+    A_real = pi * (sqrt(4*A_nom/pi) - drift)^2 / 4
+    """
+    d0 = np.sqrt(4 * area_nominal / np.pi)
+    return np.pi * (d0 - drift) ** 2 / 4

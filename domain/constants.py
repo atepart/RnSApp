@@ -69,6 +69,9 @@ class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
     RNS_ERROR = ("Ошибка RnS", float, "rns_error")
     RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
     ALLOWED_ERROR = ("Допустимое отклонение (%)", float, "allowed_error")
+    S_REAL_1 = ("S_real_1", float, "s_real_1")
+    S_REAL_CUSTOM1 = ("S_real_custom1", float, "s_real_custom1")
+    S_REAL_CUSTOM2 = ("S_real_custom2", float, "s_real_custom2")
 
 
 PLOT_COLORS = [

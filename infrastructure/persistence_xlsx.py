@@ -117,8 +117,20 @@ def load_cells_from_xlsx(file_name: str):
             try:
                 col = result_column_names.index(result_column.name)
             except (ValueError,):
-                errors.append(f"Колонка '{result_column.name}' не найдена в таблице '{result_name}'")
-                continue
+                # Backward compatibility: old name for allowed_error
+                if result_column.slug == "allowed_error":
+                    try:
+                        col = result_column_names.index("Разрешенная ошибка")
+                    except ValueError:
+                        col = None
+                else:
+                    col = None
+                # Optional new columns may be absent in older files
+                if col is None:
+                    if result_column.slug in ("s_real_1", "s_real_custom1", "s_real_custom2"):
+                        continue
+                    errors.append(f"Колонка '{result_column.name}' не найдена в таблице '{result_name}'")
+                    continue
             row = 2
             try:
                 value = ws_result[row][col].value if col is not None and ws_result[row][col].value else 0

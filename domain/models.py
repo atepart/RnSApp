@@ -71,6 +71,9 @@ class Item:
         initial_data: InitialDataItemList,
         rn_consistent: float = 0,
         allowed_error: float = 0,
+        s_real_1: float = 0,
+        s_real_custom1: float = 0,
+        s_real_custom2: float = 0,
     ) -> None:
         self.cell = cell
         self.name = name
@@ -86,6 +89,10 @@ class Item:
         self.allowed_error = allowed_error
         self.initial_data = initial_data
         self.is_plot = False
+        # Optional real areas
+        self.s_real_1 = s_real_1
+        self.s_real_custom1 = s_real_custom1
+        self.s_real_custom2 = s_real_custom2
 
 
 class ItemsList(BaseList):
