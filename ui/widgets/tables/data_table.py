@@ -141,17 +141,27 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         copy_text = ""
         max_column = copied_cells[-1].column()
         for c in copied_cells:
-            copy_text += self.item(c.row(), c.column()).text()
+            col_def = DataTableColumns.get_by_index(c.column())
+            cell_text = self.item(c.row(), c.column()).text()
+            # Replace decimal point with comma only for float columns
+            if col_def and col_def.dtype is float and cell_text:
+                cell_text = cell_text.replace(".", ",")
+            copy_text += cell_text
             if c.column() == max_column:
                 copy_text += "\n"
             else:
                 copy_text += "\t"
+        # Avoid trailing empty line causing extra cleared row on paste elsewhere
+        copy_text = copy_text.rstrip("\n")
         clipboard.setText(copy_text)
 
     def paste_data(self):
         clipboard = QtWidgets.QApplication.clipboard()
         data = clipboard.text()
         rows = data.split("\n")
+        # Drop trailing empty line to prevent clearing the next row
+        if rows and rows[-1].strip() == "":
+            rows = rows[:-1]
         start_row = self.currentRow()
         start_col = self.currentColumn()
         if start_col not in [
@@ -162,6 +172,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         ]:
             return
         for i, row in enumerate(rows):
+            if not row.strip():
+                continue
             values = row.split("\t")
             for j, value in enumerate(values):
                 if start_col in [
