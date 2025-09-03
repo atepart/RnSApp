@@ -79,6 +79,28 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.itemChanged.connect(self.on_item_changed)
         self.clear_all()
 
+    def end_editing(self):
+        """Finish active cell editing safely to avoid editor warnings."""
+        try:
+            current = self.currentItem()
+            if current is not None:
+                self.closePersistentEditor(current)
+            editor = QtWidgets.QApplication.focusWidget()
+            if editor is not None:
+                # Close editor only if it belongs to this table's viewport
+                vp = self.viewport()
+                w = editor
+                belongs = False
+                while w is not None:
+                    if w == vp:
+                        belongs = True
+                        break
+                    w = w.parent()
+                if belongs:
+                    self.closeEditor(editor, QtWidgets.QAbstractItemDelegate.NoHint)
+        except Exception:
+            pass
+
     def on_item_changed(self, item):
         if item.column() in (DataTableColumns.DIAMETER.index, DataTableColumns.RESISTANCE.index):
             row = item.row()
@@ -111,6 +133,17 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             return cbs[0] if cbs else None
         return None
 
+    def uncheck_rows_with_empty_rn(self):
+        """Uncheck selection for rows where Rn (Ω) is empty."""
+        self.end_editing()
+        for row in range(self.rowCount()):
+            item = self.item(row, DataTableColumns.RESISTANCE.index)
+            text = item.text() if item else ""
+            if not text or not str(text).strip():
+                cb = self.get_row_checkbox(row)
+                if cb:
+                    cb.setChecked(False)
+
     def keyPressEvent(self, event):
         if event.key() in (QtCore.Qt.Key.Key_Enter, QtCore.Qt.Key.Key_Return):
             row = self.currentRow()
@@ -118,6 +151,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             if row < self.rowCount() - 1:
                 self.setCurrentCell(row + 1, col)
         elif event.key() in (QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace):
+            self.end_editing()
             selected_items = self.selectedItems()
             if selected_items:
                 for item in selected_items:
@@ -137,25 +171,30 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
     def copy_data(self):
         clipboard = QtWidgets.QApplication.clipboard()
-        copied_cells = sorted(self.selectedIndexes())
-        copy_text = ""
-        max_column = copied_cells[-1].column()
-        for c in copied_cells:
-            col_def = DataTableColumns.get_by_index(c.column())
-            cell_text = self.item(c.row(), c.column()).text()
-            # Replace decimal point with comma only for float columns
-            if col_def and col_def.dtype is float and cell_text:
-                cell_text = cell_text.replace(".", ",")
-            copy_text += cell_text
-            if c.column() == max_column:
-                copy_text += "\n"
-            else:
-                copy_text += "\t"
-        # Avoid trailing empty line causing extra cleared row on paste elsewhere
-        copy_text = copy_text.rstrip("\n")
-        clipboard.setText(copy_text)
+        ranges = self.selectedRanges()
+        if not ranges:
+            return
+        r = ranges[0]
+        rows_out = []
+        for i in range(r.topRow(), r.bottomRow() + 1):
+            row_vals = []
+            for j in range(r.leftColumn(), r.rightColumn() + 1):
+                item = self.item(i, j)
+                text = item.text() if item else ""
+                col_def = DataTableColumns.get_by_index(j)
+                if col_def and col_def.dtype is float and text:
+                    # For numeric columns: use decimal comma without quoting
+                    text = text.replace(".", ",")
+                else:
+                    # Escape only for non-numeric cells if needed
+                    if text and any(ch in text for ch in ["\t", "\n", '"']):
+                        text = '"' + text.replace('"', '""') + '"'
+                row_vals.append(text)
+            rows_out.append("\t".join(row_vals))
+        clipboard.setText("\n".join(rows_out))
 
     def paste_data(self):
+        self.end_editing()
         clipboard = QtWidgets.QApplication.clipboard()
         data = clipboard.text()
         rows = data.split("\n")
@@ -204,6 +243,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         return super().get_column_value(row, column)
 
     def clear_all(self):
+        self.end_editing()
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
 
@@ -228,6 +268,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_rn(self):
+        self.end_editing()
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
         for row in range(self.rowCount()):
@@ -239,6 +280,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_calculations(self):
+        self.end_editing()
         for row in range(self.rowCount()):
             self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
             self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
@@ -246,6 +288,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))
 
     def color_row(self, row, background_color, text_color):
+        self.end_editing()
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
         for col in range(self.columnCount()):

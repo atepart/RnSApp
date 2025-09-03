@@ -264,6 +264,8 @@ class RnSApp(QtWidgets.QMainWindow):
         return self.calc.calculate_rns_drift_square_per_sample()
 
     def calculate_results(self):
+        # Uncheck rows where Rn (Ω) is empty before calculations
+        self.data_table.uncheck_rows_with_empty_rn()
         if not self.calc.calculate_results():
             return
         self.plot_current_data()
