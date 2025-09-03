@@ -60,10 +60,10 @@ class RnSApp(QtWidgets.QMainWindow):
         self.rn_consistent_layout.addWidget(self.rn_consistent)
         self.rn_consistent_group.setLayout(self.rn_consistent_layout)
 
-        self.allowed_error_group = QtWidgets.QGroupBox("Разрешенная ошибка")
+        self.allowed_error_group = QtWidgets.QGroupBox("Допустимое отклонение (%)")
         self.allowed_error_layout = QtWidgets.QHBoxLayout()
         self.allowed_error = QtWidgets.QDoubleSpinBox(self)
-        self.allowed_error.setRange(0, 1)
+        self.allowed_error.setRange(0, 100)
         self.allowed_error.setDecimals(2)
         self.allowed_error.setValue(0)
         self.allowed_error_layout.addWidget(self.allowed_error)

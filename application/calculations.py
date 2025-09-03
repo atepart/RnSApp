@@ -8,7 +8,6 @@ from domain.utils import (
     calculate_drift_per_sample,
     calculate_rn_sqrt,
     calculate_rns,
-    calculate_rns_error_diff,
     calculate_rns_error_per_sample,
     calculate_rns_per_sample,
     calculate_square,
@@ -92,14 +91,16 @@ class CalculationService:
             rns_value = self.data_table.get_column_value(row, DataTableColumns.RNS)
             if not rns_value:
                 continue
+            # Keep absolute deviation in the table column for RnS error
             value = calculate_rns_error_per_sample(rns_i=rns_value, rns=rns)
             self.data_table.setItem(row, DataTableColumns.RNS_ERROR.index, TableWidgetItem(str(value)))
-            error_diff = calculate_rns_error_diff(
-                rns_error_per_sample=value,
-                rns_error=rns_error,
-                allowed_error=self.allowed_error_widget.value(),
-            )
-            if error_diff > 0:
+
+            # Compare relative deviation in percent with user allowed deviation (%)
+            try:
+                rel_dev_percent = abs(rns_value - rns) / rns * 100
+            except ZeroDivisionError:
+                rel_dev_percent = float("inf")
+            if rel_dev_percent > self.allowed_error_widget.value():
                 self.data_table.color_row(row=row, background_color=RNS_ERROR_COLOR, text_color=WHITE)
             else:
                 self.data_table.color_row(row=row, background_color=WHITE, text_color=BLACK)

@@ -68,7 +68,7 @@ class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
     DRIFT_ERROR = ("Ошибка ухода", float, "drift_error")
     RNS_ERROR = ("Ошибка RnS", float, "rns_error")
     RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
-    ALLOWED_ERROR = ("Разрешенная ошибка", float, "allowed_error")
+    ALLOWED_ERROR = ("Допустимое отклонение (%)", float, "allowed_error")
 
 
 PLOT_COLORS = [
