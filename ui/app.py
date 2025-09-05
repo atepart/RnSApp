@@ -24,7 +24,7 @@ class RnSApp(QtWidgets.QMainWindow):
         super(RnSApp, self).__init__()
         self.setGeometry(100, 100, 1400, 900)
 
-        self.setWindowIcon(QIcon("./assets/rns-logo-sm.png"))
+        self.setWindowIcon(QIcon("./assets/rns-logo-alt.ico"))
         # Табличка с данными без заголовка-лейбла
         self.data_table = DataTable(rows=50)
 
