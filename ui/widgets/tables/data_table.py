@@ -40,6 +40,16 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         super(DataTable, self).__init__(rows, len(DataTableColumns.get_all_names()))
         self.header = Header(self)
         self.setHorizontalHeader(self.header)
+        # Header bold font and bottom black border
+        try:
+            f = self.horizontalHeader().font()
+            f.setBold(True)
+            self.horizontalHeader().setFont(f)
+        except Exception:
+            pass
+        self.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # Use stylesheet to draw bottom border separating header from data
+        self.horizontalHeader().setStyleSheet("QHeaderView::section { border-bottom: 2px solid black; }")
         self.setHorizontalHeaderLabels(DataTableColumns.get_all_names())
         self.setColumnWidth(DataTableColumns.NAME.index, 160)
         self.setColumnWidth(DataTableColumns.RESISTANCE.index, 160)
@@ -55,6 +65,8 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.verticalHeader().setVisible(False)
         self.setShowGrid(True)
         self.setGridStyle(QtCore.Qt.PenStyle.SolidLine)
+        # Center default alignment (items set to center in TableWidgetItem already)
+        self.setStyleSheet("QTableWidget { gridline-color: palette(mid); } QTableWidget::item { text-align: center; }")
 
         self.set_default_numbers()
         self.set_default_checks()
@@ -249,12 +261,12 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.itemChanged.disconnect()
 
         for row in range(self.rowCount()):
-            self.setItem(row, DataTableColumns.NAME.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.DIAMETER.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.RESISTANCE.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.NAME.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RNS.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DIAMETER.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RESISTANCE.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.NUMBER.index, TableWidgetItem(str(row + 1)))
             checkbox = QtWidgets.QCheckBox()
             container = QtWidgets.QWidget()
@@ -273,20 +285,20 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         with contextlib.suppress(TypeError):
             self.itemChanged.disconnect()
         for row in range(self.rowCount()):
-            self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.RESISTANCE.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RNS.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RESISTANCE.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_calculations(self):
         self.end_editing()
         for row in range(self.rowCount()):
-            self.setItem(row, DataTableColumns.RNS.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.DRIFT.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.RN_SQRT.index, QtWidgets.QTableWidgetItem(""))
-            self.setItem(row, DataTableColumns.SQUARE.index, QtWidgets.QTableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RNS.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))
 
     def color_row(self, row, background_color, text_color):
         self.end_editing()

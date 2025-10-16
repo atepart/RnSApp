@@ -167,6 +167,7 @@ class XlsxCellIO(CellDataIO):
                 hcell = ws.cell(row=1, column=col_idx, value=col_def.slug)
                 hcell.font = Font(bold=True)
                 hcell.border = Border(bottom=Side(style="medium"))
+                hcell.alignment = Alignment(horizontal="center", vertical="center")
                 with contextlib.suppress(Exception):
                     ws.column_dimensions[get_column_letter(col_idx)].width = max(len(str(col_def.slug)) + 2, 10)
 
@@ -194,7 +195,8 @@ class XlsxCellIO(CellDataIO):
                 if pos is not None:
                     col_def = next(c for c in export_data_columns if c.index == col)
                     coerced = _coerce_value(val, col_def.dtype)
-                    ws.cell(row=row + 2, column=pos, value=coerced)
+                    c = ws.cell(row=row + 2, column=pos, value=coerced)
+                    c.alignment = Alignment(horizontal="center", vertical="center")
 
             # Results header placed to the right with a gap column
             results_start_col = len(export_data_columns) + 2
@@ -202,6 +204,7 @@ class XlsxCellIO(CellDataIO):
                 hcell = ws.cell(row=1, column=results_start_col + i, value=param.name)
                 hcell.font = Font(bold=True)
                 hcell.border = Border(bottom=Side(style="medium"))
+                hcell.alignment = Alignment(horizontal="center", vertical="center")
                 with contextlib.suppress(Exception):
                     ws.column_dimensions[get_column_letter(results_start_col + i)].width = max(
                         len(str(param.name)) + 2, 10
@@ -210,7 +213,8 @@ class XlsxCellIO(CellDataIO):
                 # Value row (2)
                 raw_value = getattr(cell_data, param.slug, "")
                 value = _coerce_value(raw_value, param.dtype)
-                ws.cell(row=2, column=results_start_col + i, value=value)
+                vcell = ws.cell(row=2, column=results_start_col + i, value=value)
+                vcell.alignment = Alignment(horizontal="center", vertical="center")
 
             # Build chart: Rn^-0.5 vs Диаметр ACAD (μm)
             try:

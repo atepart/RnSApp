@@ -6,3 +6,5 @@ class TableWidgetItem(QtWidgets.QTableWidgetItem):
         super().__init__(*args, **kwargs)
         # Ensure the item is editable unless a read-only delegate is set
         self.setFlags(self.flags() | QtCore.Qt.ItemFlag.ItemIsEditable)
+        # Center content by default
+        self.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)

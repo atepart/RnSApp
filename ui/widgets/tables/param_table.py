@@ -14,6 +14,15 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         super(ParamTable, self).__init__(1, len(ParamTableColumns.get_all_names()))
 
         self.setHorizontalHeaderLabels(ParamTableColumns.get_all_names())
+        # Header alignment bold + bottom border
+        try:
+            f = self.horizontalHeader().font()
+            f.setBold(True)
+            self.horizontalHeader().setFont(f)
+        except Exception:
+            pass
+        self.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.horizontalHeader().setStyleSheet("QHeaderView::section { border-bottom: 2px solid black; }")
         # Enable horizontal scrolling by avoiding stretch and letting content define width
         self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -21,6 +30,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.verticalHeader().setVisible(False)
         self.setFixedHeight(self.rowHeight(0) + self.horizontalHeader().height())
+        # Center items by default via TableWidgetItem and stylesheet
+        self.setStyleSheet("QTableWidget::item { text-align: center; }")
 
         self.set_read_only_columns(
             [
@@ -61,11 +72,7 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
 
     def clear_all(self):
         for col in range(self.columnCount()):
-            self.setItem(
-                0,
-                col,
-                QtWidgets.QTableWidgetItem(""),
-            )
+            self.setItem(0, col, TableWidgetItem(""))
 
     def load_data(self, data: Item):
         self.setItem(0, ParamTableColumns.SLOPE.index, TableWidgetItem(str(data.slope)))
