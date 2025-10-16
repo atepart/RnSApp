@@ -31,7 +31,7 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             return None
         if isinstance(val, (int, float)):
             try:
-                return int(val) if isinstance(val, int) else round(float(val), 2)
+                return int(val) if isinstance(val, int) else round(float(val), 3)
             except Exception:
                 return val
         if isinstance(val, str):
@@ -43,7 +43,7 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             # pure number?
             if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
                 try:
-                    return round(float(s), 2)
+                    return round(float(s), 3)
                 except Exception:
                     return val
         return val
@@ -58,6 +58,9 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
                 value = None if num in (None, "") else num
             cell = ws_cells.cell(row=row_ind, column=col_ind, value=value)
             cell.alignment = Alignment(horizontal="center", vertical="center")
+            # format floats to 3 decimals
+            if not is_header and isinstance(value, float):
+                cell.number_format = "0.000"
             if (row_ind - 1) % 3 == 0:
                 cell.border = Border(
                     right=Side(style="thick"), left=Side(style="thick"), top=Side("thick"), bottom=Side(style="thick")
@@ -142,7 +145,7 @@ class XlsxCellIO(CellDataIO):
                     if isinstance(val, str):
                         # Normalize decimal separator: comma -> dot
                         val = val.replace(",", ".")
-                    return round(float(val), 2)
+                    return round(float(val), 3)
                 if dtype is int:
                     if isinstance(val, str):
                         val = val.replace(",", ".")
@@ -197,6 +200,8 @@ class XlsxCellIO(CellDataIO):
                     coerced = _coerce_value(val, col_def.dtype)
                     c = ws.cell(row=row + 2, column=pos, value=coerced)
                     c.alignment = Alignment(horizontal="center", vertical="center")
+                    if col_def.dtype is float and coerced not in (None, ""):
+                        c.number_format = "0.000"
 
             # Results header placed to the right with a gap column
             results_start_col = len(export_data_columns) + 2
@@ -215,6 +220,8 @@ class XlsxCellIO(CellDataIO):
                 value = _coerce_value(raw_value, param.dtype)
                 vcell = ws.cell(row=2, column=results_start_col + i, value=value)
                 vcell.alignment = Alignment(horizontal="center", vertical="center")
+                if param.dtype is float and value not in (None, ""):
+                    vcell.number_format = "0.000"
 
             # Build chart: Rn^-0.5 vs Диаметр ACAD (μm)
             try:
