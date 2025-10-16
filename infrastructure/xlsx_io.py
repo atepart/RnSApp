@@ -10,6 +10,7 @@ from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.trendline import Trendline
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.utils import get_column_letter
 
 from domain.constants import BLUE, RED, DataTableColumns, ParamTableColumns
 from domain.models import InitialDataItem, InitialDataItemList
@@ -25,9 +26,37 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
         block_transposed = list(map(list, zip(*block)))
         output.extend(block_transposed)
 
+    def _maybe_numeric(val):
+        if val in (None, ""):
+            return None
+        if isinstance(val, (int, float)):
+            try:
+                return int(val) if isinstance(val, int) else round(float(val), 2)
+            except Exception:
+                return val
+        if isinstance(val, str):
+            s = val.strip()
+            # Values like "Уход: 0.123" or "RnS: 55.3" -> take right part
+            if ":" in s:
+                s = s.split(":", 1)[1].strip()
+            s = s.replace(",", ".")
+            # pure number?
+            if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+                try:
+                    return round(float(s), 2)
+                except Exception:
+                    return val
+        return val
+
     for row_ind, row in enumerate(output, 1):
         for col_ind, coll in enumerate(row, 1):
-            cell = ws_cells.cell(row=row_ind, column=col_ind, value=coll)
+            # Header row every 3rd (names) stays text; others (drift, RnS) try numeric
+            is_header = (row_ind - 1) % 3 == 0
+            value = coll
+            if not is_header:
+                num = _maybe_numeric(coll)
+                value = None if num in (None, "") else num
+            cell = ws_cells.cell(row=row_ind, column=col_ind, value=value)
             cell.alignment = Alignment(horizontal="center", vertical="center")
             if (row_ind - 1) % 3 == 0:
                 cell.border = Border(
@@ -67,7 +96,7 @@ class XlsxCellIO(CellDataIO):
                     if isinstance(val, str):
                         # Normalize decimal separator: comma -> dot
                         val = val.replace(",", ".")
-                    return float(val)
+                    return round(float(val), 2)
                 if dtype is int:
                     if isinstance(val, str):
                         val = val.replace(",", ".")
@@ -87,9 +116,13 @@ class XlsxCellIO(CellDataIO):
             sheet_name = f"Cell №{cell_data.cell} {cell_data.name}"
             ws = wb.create_sheet(sheet_name)
 
-            # Write data header (row 1)
+            # Write data header (row 1) with styling and width based on header text
             for col_idx, col_def in enumerate(export_data_columns, start=1):
-                ws.cell(row=1, column=col_idx, value=col_def.slug)
+                hcell = ws.cell(row=1, column=col_idx, value=col_def.slug)
+                hcell.font = Font(bold=True)
+                hcell.border = Border(bottom=Side(style="medium"))
+                with contextlib.suppress(Exception):
+                    ws.column_dimensions[get_column_letter(col_idx)].width = max(len(str(col_def.slug)) + 2, 10)
 
             # Write data values from InitialDataItemList
             # Determine how many rows are present in initial data
@@ -120,7 +153,14 @@ class XlsxCellIO(CellDataIO):
             # Results header placed to the right with a gap column
             results_start_col = len(export_data_columns) + 2
             for i, param in enumerate(ParamTableColumns, start=0):
-                ws.cell(row=1, column=results_start_col + i, value=param.name)
+                hcell = ws.cell(row=1, column=results_start_col + i, value=param.name)
+                hcell.font = Font(bold=True)
+                hcell.border = Border(bottom=Side(style="medium"))
+                with contextlib.suppress(Exception):
+                    ws.column_dimensions[get_column_letter(results_start_col + i)].width = max(
+                        len(str(param.name)) + 2, 10
+                    )
+
                 # Value row (2)
                 raw_value = getattr(cell_data, param.slug, "")
                 value = _coerce_value(raw_value, param.dtype)
@@ -202,9 +242,9 @@ class XlsxCellIO(CellDataIO):
                     series.marker.graphicalProperties.line.solidFill = blue
                     if getattr(series.graphicalProperties, "line", None) is not None:
                         series.graphicalProperties.line.noFill = True
-                # Trendline with equation and R^2 displayed; paint it RED
+                # Trendline: show equation only (no R^2); paint it RED
                 with contextlib.suppress(Exception):
-                    series.trendline = Trendline(trendlineType="linear", dispEq=True, dispRSqr=True)
+                    series.trendline = Trendline(trendlineType="linear", dispEq=True, dispRSqr=False)
                     red = RED.lstrip("#").upper()
                     try:
                         series.trendline.graphicalProperties.line.solidFill = red
@@ -214,6 +254,28 @@ class XlsxCellIO(CellDataIO):
 
                 chart.varyColors = False
                 chart.series.append(series)
+
+                # Ensure axis range includes x-intercept (drift); extend trendline via forecast to reach it
+                with contextlib.suppress(Exception):
+                    drift = float(getattr(cell_data, "drift", 0.0))
+                    x_vals: List[float] = []
+                    for r in range(2, max_row + 1):
+                        xv = ws.cell(row=r, column=x_col_idx).value
+                        if xv not in (None, ""):
+                            x_vals.append(float(xv))
+                    if x_vals:
+                        chart.x_axis.scaling.min = min(min(x_vals), drift)
+                        chart.x_axis.scaling.max = max(max(x_vals), drift)
+                        # Forecast distances measured along X units
+                        try:
+                            backward = max(0.0, min(x_vals) - drift)
+                            forward = max(0.0, drift - max(x_vals))
+                            if hasattr(series.trendline, "backward"):
+                                series.trendline.backward = round(backward, 2)
+                            if hasattr(series.trendline, "forward"):
+                                series.trendline.forward = round(forward, 2)
+                        except Exception:
+                            pass
 
                 # Place chart under the results table
                 chart_anchor_row = 4
@@ -323,14 +385,16 @@ class XlsxCellIO(CellDataIO):
 
             # Results: read from headers with ParamTableColumns names (one row of values)
             result_kwargs: Dict[str, Any] = {}
-            optional_slugs = {"s_real_1", "s_real_custom1", "s_real_custom2", "s_custom1", "s_custom2"}
+            optional_slugs = {
+                ParamTableColumns.S_REAL_1.slug,
+                ParamTableColumns.S_REAL_CUSTOM1.slug,
+                ParamTableColumns.S_REAL_CUSTOM2.slug,
+                ParamTableColumns.S_CUSTOM1.slug,
+                ParamTableColumns.S_CUSTOM2.slug,
+            }
             for param in ParamTableColumns:
                 col = last_col_for(param.name)
                 value = ws.cell(row=2, column=col).value if col is not None else None
-                if value is None and param.slug == "allowed_error":
-                    # Backward compatibility alias
-                    col = first_col_for("Разрешенная ошибка")
-                    value = ws.cell(row=2, column=col).value if col is not None else None
                 if value is None and param.slug in optional_slugs:
                     # Optional
                     continue

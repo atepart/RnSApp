@@ -117,17 +117,16 @@ def load_cells_from_xlsx(file_name: str):
             try:
                 col = result_column_names.index(result_column.name)
             except (ValueError,):
-                # Backward compatibility: old name for allowed_error
-                if result_column.slug == "allowed_error":
-                    try:
-                        col = result_column_names.index("Разрешенная ошибка")
-                    except ValueError:
-                        col = None
-                else:
-                    col = None
+                col = None
                 # Optional new columns may be absent in older files
                 if col is None:
-                    if result_column.slug in ("s_real_1", "s_real_custom1", "s_real_custom2", "s_custom1", "s_custom2"):
+                    if result_column.slug in (
+                        ParamTableColumns.S_REAL_1.slug,
+                        ParamTableColumns.S_REAL_CUSTOM1.slug,
+                        ParamTableColumns.S_REAL_CUSTOM2.slug,
+                        ParamTableColumns.S_CUSTOM1.slug,
+                        ParamTableColumns.S_CUSTOM2.slug,
+                    ):
                         continue
                     errors.append(f"Колонка '{result_column.name}' не найдена в таблице '{result_name}'")
                     continue
