@@ -75,6 +75,52 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
         ws_cells.row_dimensions[row[0].row].height = 21
 
 
+_SANITIZE_MAP = {
+    "/": "／",  # FULLWIDTH SOLIDUS
+    "\\": "＼",  # FULLWIDTH REVERSE SOLIDUS
+    ":": "：",  # FULLWIDTH COLON
+    "*": "∗",  # ASTERISK OPERATOR
+    "?": "？",  # FULLWIDTH QUESTION MARK
+    "[": "［",  # FULLWIDTH LEFT SQUARE BRACKET
+    "]": "］",  # FULLWIDTH RIGHT SQUARE BRACKET
+}
+_DESANITIZE_MAP = {v: k for k, v in _SANITIZE_MAP.items()}
+
+
+def _sanitize_title_component(text: str) -> str:
+    if not isinstance(text, str):
+        return str(text)
+    out = []
+    for ch in text:
+        out.append(_SANITIZE_MAP.get(ch, ch))
+    return "".join(out)
+
+
+def _desanitize_title_component(text: str) -> str:
+    if not isinstance(text, str):
+        return str(text)
+    out = []
+    for ch in text:
+        out.append(_DESANITIZE_MAP.get(ch, ch))
+    return "".join(out)
+
+
+def _compose_cell_sheet_title(cell_index: int, name: str, existing: List[str]) -> str:
+    prefix = f"Cell №{cell_index} "
+    safe_name = _sanitize_title_component(name)
+    # Excel sheet title max length = 31
+    max_name_len = max(0, 31 - len(prefix))
+    base = prefix + safe_name[:max_name_len]
+    title = base
+    suffix = 2
+    while title in existing:
+        # try appending _n within 31 chars
+        suf = f"_{suffix}"
+        title = (base[: max(0, 31 - len(suf))] + suf) if len(base) + len(suf) > 31 else base + suf
+        suffix += 1
+    return title
+
+
 class XlsxCellIO(CellDataIO):
     """XLSX adapter implementing combined per-cell sheet with data+results and a chart."""
 
@@ -113,7 +159,7 @@ class XlsxCellIO(CellDataIO):
 
         # Create one sheet per recorded cell with data table on the left and results on the right
         for cell_data in repo:
-            sheet_name = f"Cell №{cell_data.cell} {cell_data.name}"
+            sheet_name = _compose_cell_sheet_title(cell_data.cell, cell_data.name, wb.sheetnames)
             ws = wb.create_sheet(sheet_name)
 
             # Write data header (row 1) with styling and width based on header text
@@ -313,6 +359,8 @@ class XlsxCellIO(CellDataIO):
             try:
                 i = int(re.findall(r"Cell №(\d+) ", sheet_name)[0])
                 cell_name = re.findall(r"Cell №\d+ (.*)", sheet_name)[0]
+                # de-sanitize sheet component back to original visible ASCII if needed
+                cell_name = _desanitize_title_component(cell_name)
             except (IndexError, ValueError):
                 errors.append(f"Неверное имя листа: {sheet_name}")
                 continue
