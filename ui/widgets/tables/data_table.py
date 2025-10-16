@@ -75,6 +75,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
         self.setColumnHidden(DataTableColumns.DRIFT.index, True)
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
+        self.setColumnHidden(DataTableColumns.RN_SQRT.index, True)
 
         self.itemChanged.connect(self.on_item_changed)
         self.clear_all()
