@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import os
 
 import numpy as np
 import pyqtgraph as pg
@@ -232,6 +233,38 @@ class RnSApp(QtWidgets.QMainWindow):
                 dock.setVisible(True)
                 dock.show()
 
+    # ----- Settings helpers for file dialogs -----
+    def _get_initial_directory(self) -> str:
+        """Return a starting directory for file dialogs.
+
+        Uses last successful path from settings; otherwise falls back to filesystem root.
+        """
+        settings = QSettings()
+        settings.beginGroup("FileDialog")
+        last_dir = settings.value("last_dir", type=str)
+        settings.endGroup()
+        if isinstance(last_dir, str) and last_dir and os.path.isdir(last_dir):
+            return last_dir
+        # Fallback: filesystem root to show all volumes (Unix '/')
+        try:
+            from PySide6.QtCore import QDir
+
+            return QDir.rootPath()
+        except Exception:
+            return os.path.abspath(os.sep)
+
+    def _remember_path(self, path: str) -> None:
+        """Store the directory part of the given path into settings."""
+        if not path:
+            return
+        directory = path if os.path.isdir(path) else os.path.dirname(path)
+        if not directory:
+            return
+        settings = QSettings()
+        settings.beginGroup("FileDialog")
+        settings.setValue("last_dir", directory)
+        settings.endGroup()
+
     def save_settings(self):
         settings = QSettings()
         settings.beginGroup("MainWindow")
@@ -371,15 +404,17 @@ class RnSApp(QtWidgets.QMainWindow):
     def save_cell_data(self):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
+        start_dir = self._get_initial_directory()
         file_name, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Save Cell Data",
-            "",
+            start_dir,
             "Excel Files (*.xlsx);;All Files (*)",
             options=options,
         )
         if not file_name:
             return
+        self._remember_path(file_name)
         init_data = [(cell.name.text(), cell.drift.text(), cell.rns.text()) for cell in self.cell_widgets]
         self.excel_io.save(
             file_name=file_name,
@@ -445,11 +480,13 @@ class RnSApp(QtWidgets.QMainWindow):
         self.set_active_cell(0)
 
         options = QtWidgets.QFileDialog.Options()
+        start_dir = self._get_initial_directory()
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
-            None, "Выберите файл XLSX", "", "Excel Files (*.xlsx);;All Files (*)", options=options
+            None, "Выберите файл XLSX", start_dir, "Excel Files (*.xlsx);;All Files (*)", options=options
         )
         if not fileName:
             return
+        self._remember_path(fileName)
 
         is_some_errors = False
         some_errors_text = ""
