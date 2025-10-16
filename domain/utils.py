@@ -39,9 +39,18 @@ def linear(x: float, b: float, a: float):
 
 
 def drop_nans(arr1: list, arr2: list):
+    """Return two float arrays with rows where both inputs are truthy; never fail unpacking.
+
+    If no valid pairs, returns two empty arrays with shape (0,).
+    """
     if len(arr1) != len(arr2):
         raise ListsNotSameLength
-    return np.array([arr for arr in np.array([arr1, arr2]).T if all(arr)], dtype=float).T
+    pairs = np.array([arr1, arr2], dtype=object).T
+    kept = [pair for pair in pairs if all(pair)]
+    if not kept:
+        return np.array([], dtype=float), np.array([], dtype=float)
+    kept_arr = np.array(kept, dtype=float).T
+    return kept_arr[0], kept_arr[1]
 
 
 def calculate_drift(slope: float, intercept: float):

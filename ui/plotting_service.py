@@ -118,26 +118,66 @@ class PlotService:
                 return
         if diameter.size == 0:
             return
-        diameter_list = diameter.tolist()
-        if np.min(diameter_list) > item.drift:
-            diameter_list.insert(0, item.drift)
-        if np.max(diameter_list) < item.drift:
-            diameter_list.append(item.drift)
-        y_appr = np.vectorize(lambda x: linear(x, item.slope, item.intercept))(diameter_list)
+
+        # Sort by diameter for better visuals
+        try:
+            arr = np.array([diameter, rn_sqrt]).T
+            arr = arr[arr[:, 0].argsort()]
+            diameter_sorted = arr[:, 0].tolist()
+            rn_sqrt_sorted = arr[:, 1].tolist()
+        except Exception:
+            diameter_sorted = diameter.tolist()
+            rn_sqrt_sorted = rn_sqrt.tolist()
+
+        # Prepare fit x range to include drift
+        fit_x = list(diameter_sorted)
+        with np.errstate(all="ignore"):
+            if len(fit_x):
+                if np.min(fit_x) > item.drift:
+                    fit_x.insert(0, item.drift)
+                if np.max(fit_x) < item.drift:
+                    fit_x.append(item.drift)
+        y_appr = np.vectorize(lambda x: linear(x, item.slope, item.intercept))(fit_x)
+
+        # Color by cell number
         color = PLOT_COLORS[cell - 1]
-        pen2 = pg.mkPen(color=color, width=2)
+        pen = pg.mkPen(color=color, width=2)
+
+        # Remove previous items for this cell (data and fit) if exist
+        plotItem = self.plot.getPlotItem()
+        to_remove = [
+            it for it in plotItem.items if it.name() in {f"{item.name}", f"{item.name} (fit)", f"{item.name} (data)"}
+        ]
+        for it in to_remove:
+            plotItem.removeItem(it)
+
+        # Plot scatter points for data (same color, no legend clutter)
         self.plot.plot(
-            diameter_list,
+            diameter_sorted,
+            rn_sqrt_sorted,
+            name=f"{item.name} (data)",
+            pen=None,
+            symbol="o",
+            symbolSize=7,
+            symbolBrush=color,
+            symbolPen=pen,
+        )
+
+        # Plot fit line for this cell
+        self.plot.plot(
+            fit_x,
             y_appr,
             name=f"{item.name}",
-            pen=pen2,
-            symbolSize=0,
-            symbolBrush=pen2.color(),
+            pen=pen,
+            symbol=None,
         )
 
     def remove_cell_plot(self, cell: int, store):
         cell_data = store.get(cell=cell)
         plotItem = self.plot.getPlotItem()
-        items_to_remove = [item for item in plotItem.items if item.name() == (cell_data.name if cell_data else None)]
+        target_names = set()
+        if cell_data:
+            target_names = {cell_data.name, f"{cell_data.name} (fit)", f"{cell_data.name} (data)"}
+        items_to_remove = [item for item in plotItem.items if item.name() in target_names]
         for item in items_to_remove:
             plotItem.removeItem(item)
