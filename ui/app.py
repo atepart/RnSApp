@@ -143,14 +143,14 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_grid.setHorizontalSpacing(12)
         inputs_grid.setVerticalSpacing(6)
         # Row 0
-        inputs_grid.addWidget(QtWidgets.QLabel("Последовательное Rn (Ом):"), 0, 0)
+        inputs_grid.addWidget(QtWidgets.QLabel("Последовательное Rn (Ω):"), 0, 0)
         inputs_grid.addWidget(self.rn_consistent, 0, 1)
         inputs_grid.addWidget(QtWidgets.QLabel("Допустимое отклонение (%):"), 0, 2)
         inputs_grid.addWidget(self.allowed_error, 0, 3)
         # Row 1
-        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S1 (мкм²):"), 1, 0)
+        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S1 (μm²):"), 1, 0)
         inputs_grid.addWidget(self.s_custom1, 1, 1)
-        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S2 (мкм²):"), 1, 2)
+        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S2 (μm²):"), 1, 2)
         inputs_grid.addWidget(self.s_custom2, 1, 3)
         inputs_layout.addLayout(inputs_grid)
         inputs_layout.addStretch(1)

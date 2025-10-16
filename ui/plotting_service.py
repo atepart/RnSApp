@@ -15,7 +15,7 @@ class PlotService:
         self.param_table = param_table
 
     def prepare_plot(self):
-        y_label = "Rn^-0.5"
+        y_label = "1/√Rₙ"
         x_label = "Диаметр ACAD (μm)"
         self.plot.setBackground("w")
         styles = {"color": "#413C58", "font-size": "15px"}

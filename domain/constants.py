@@ -52,12 +52,12 @@ class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     NAME = ("Имя", str, "Имя")
     SELECT = ("", bool, "✓")
     DIAMETER = ("Диаметр ACAD (μm)", float, "Диаметр ACAD (μm)")
-    RESISTANCE = ("Rn (Ω)", float, "Rn (Ω)")
+    RESISTANCE = ("Rₙ (Ω)", float, "Rₙ (Ω)")
     RNS = ("RnS", float, "RnS")
     RNS_ERROR = ("Ошибка RnS", float, "Ошибка RnS")
     DRIFT = ("Суммарный Уход (μm)", float, "Суммарный Уход (μm)")
-    SQUARE = ("Площадь (μm^2)", float, "Площадь (μm^2)")
-    RN_SQRT = ("Rn^-0.5", float, "Rn^-0.5")
+    SQUARE = ("Площадь (μm²)", float, "Площадь (μm²)")
+    RN_SQRT = ("1/√Rₙ", float, "1/√Rₙ")
 
 
 class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
@@ -69,11 +69,11 @@ class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
     RNS_ERROR = ("Ошибка RnS", float, "rns_error")
     RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
     ALLOWED_ERROR = ("Допустимое отклонение (%)", float, "allowed_error")
-    S_CUSTOM1 = ("Заданная площадь S1 (мкм²)", float, "s_custom1")
-    S_CUSTOM2 = ("Заданная площадь S2 (мкм²)", float, "s_custom2")
-    S_REAL_1 = ("S_real_1", float, "s_real_1")
-    S_REAL_CUSTOM1 = ("S_real_custom1", float, "s_real_custom1")
-    S_REAL_CUSTOM2 = ("S_real_custom2", float, "s_real_custom2")
+    S_CUSTOM1 = ("Заданная площадь S2 (μm²)", float, "s_custom1")
+    S_CUSTOM2 = ("Заданная площадь S3 (μm²)", float, "s_custom2")
+    S_REAL_1 = ("S_1.00 (μm²)", float, "s_real_1")
+    S_REAL_CUSTOM1 = ("S-2 (μm²)", float, "s_real_custom1")
+    S_REAL_CUSTOM2 = ("S-3 (μm²)", float, "s_real_custom2")
 
 
 PLOT_COLORS = [
