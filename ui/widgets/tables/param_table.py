@@ -47,6 +47,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM2.index, RoundedDelegate(rounded=3, parent=self))
 
         self.setColumnHidden(ParamTableColumns.DRIFT_ERROR.index, True)
+        self.setColumnHidden(ParamTableColumns.SLOPE.index, True)
+        self.setColumnHidden(ParamTableColumns.INTERCEPT.index, True)
         self.setColumnHidden(ParamTableColumns.RN_CONSISTENT.index, True)
         self.setColumnHidden(ParamTableColumns.ALLOWED_ERROR.index, True)
         self.setColumnHidden(ParamTableColumns.S_CUSTOM1.index, True)
@@ -76,29 +78,29 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItem(0, ParamTableColumns.ALLOWED_ERROR.index, TableWidgetItem(str(data.allowed_error)))
         self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(data.s_custom1)))
         self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
-        # Optional values may be missing in older saved files
+
         with contextlib.suppress(Exception):
-            self.setItem(0, ParamTableColumns.S_REAL_1.index, TableWidgetItem(str(getattr(data, "s_real_1", ""))))
+            self.setItem(0, ParamTableColumns.S_REAL_1.index, TableWidgetItem(str(data.s_real_1)))
 
         with contextlib.suppress(Exception):
             self.setItem(
                 0,
                 ParamTableColumns.S_REAL_CUSTOM1.index,
-                TableWidgetItem(str(getattr(data, "s_real_custom1", ""))),
+                TableWidgetItem(str(data.s_real_custom1)),
             )
 
         with contextlib.suppress(Exception):
             self.setItem(
                 0,
                 ParamTableColumns.S_REAL_CUSTOM2.index,
-                TableWidgetItem(str(getattr(data, "s_real_custom2", ""))),
+                TableWidgetItem(str(data.s_real_custom2)),
             )
 
         with contextlib.suppress(Exception):
-            self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(getattr(data, "s_custom1", ""))))
+            self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(data.s_custom1)))
 
         with contextlib.suppress(Exception):
-            self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(getattr(data, "s_custom2", ""))))
+            self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
 
     def is_empty(self):
         return not all(self.item(0, param.index).text() for param in ParamTableColumns)
