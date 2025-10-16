@@ -137,8 +137,18 @@ class CalculationService:
                 self.data_table.color_row(row=row, background_color=WHITE, text_color=BLACK)
 
         drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
-        drift_list = np.array([v for v in self.data_table.get_column_values(DataTableColumns.DRIFT) if v], dtype=float)
-        drift_error = np.sqrt(np.sum((drift_list - drift) ** 2) / len(drift_list))
+        drift_list_raw = [v for v in self.data_table.get_column_values(DataTableColumns.DRIFT) if v not in (None, "")]
+        try:
+            drift_list = np.array(drift_list_raw, dtype=float)
+        except Exception:
+            drift_list = np.array([], dtype=float)
+        if drift is None or len(drift_list) == 0:
+            drift_error = 0.0
+        else:
+            with np.errstate(invalid="ignore"):
+                drift_error = float(np.sqrt(np.sum((drift_list - drift) ** 2) / len(drift_list)))
+                if np.isnan(drift_error):
+                    drift_error = 0.0
         self.param_table.setItem(0, ParamTableColumns.DRIFT_ERROR.index, TableWidgetItem(str(drift_error)))
 
         self.param_table.setItem(

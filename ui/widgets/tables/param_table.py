@@ -49,6 +49,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(ParamTableColumns.DRIFT_ERROR.index, True)
         self.setColumnHidden(ParamTableColumns.RN_CONSISTENT.index, True)
         self.setColumnHidden(ParamTableColumns.ALLOWED_ERROR.index, True)
+        self.setColumnHidden(ParamTableColumns.S_CUSTOM1.index, True)
+        self.setColumnHidden(ParamTableColumns.S_CUSTOM2.index, True)
 
         self.clear_all()
 
@@ -72,6 +74,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItem(0, ParamTableColumns.RNS_ERROR.index, TableWidgetItem(str(data.rns_error)))
         self.setItem(0, ParamTableColumns.RN_CONSISTENT.index, TableWidgetItem(str(data.rn_consistent)))
         self.setItem(0, ParamTableColumns.ALLOWED_ERROR.index, TableWidgetItem(str(data.allowed_error)))
+        self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(data.s_custom1)))
+        self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
         # Optional values may be missing in older saved files
         with contextlib.suppress(Exception):
             self.setItem(0, ParamTableColumns.S_REAL_1.index, TableWidgetItem(str(getattr(data, "s_real_1", ""))))
@@ -89,6 +93,12 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
                 ParamTableColumns.S_REAL_CUSTOM2.index,
                 TableWidgetItem(str(getattr(data, "s_real_custom2", ""))),
             )
+
+        with contextlib.suppress(Exception):
+            self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(getattr(data, "s_custom1", ""))))
+
+        with contextlib.suppress(Exception):
+            self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(getattr(data, "s_custom2", ""))))
 
     def is_empty(self):
         return not all(self.item(0, param.index).text() for param in ParamTableColumns)

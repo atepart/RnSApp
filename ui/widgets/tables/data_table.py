@@ -311,7 +311,11 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                         value = ""
                         logger.debug(f"DataTable item row={row} col={col} is None")
                     else:
-                        value = DataTableColumns.get_by_index(col).dtype(item.text()) if item.text() else ""
+                        text = item.text() if item.text() else ""
+                        if text in ("None", "none"):
+                            value = ""
+                        else:
+                            value = DataTableColumns.get_by_index(col).dtype(text) if text else ""
                 data.append(InitialDataItem(value=value, row=row, col=col))
         return data
 
@@ -330,7 +334,9 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
                 lay.addWidget(checkbox)
                 self.setCellWidget(item["row"], DataTableColumns.SELECT.index, container)
             else:
-                self.setItem(item["row"], item["col"], TableWidgetItem(f"{item['value']}"))
+                v = item["value"]
+                text = "" if v in (None, "None", "") else f"{v}"
+                self.setItem(item["row"], item["col"], TableWidgetItem(text))
         self.itemChanged.connect(self.on_item_changed)
 
         if not any(

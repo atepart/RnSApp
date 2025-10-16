@@ -127,7 +127,7 @@ def load_cells_from_xlsx(file_name: str):
                     col = None
                 # Optional new columns may be absent in older files
                 if col is None:
-                    if result_column.slug in ("s_real_1", "s_real_custom1", "s_real_custom2"):
+                    if result_column.slug in ("s_real_1", "s_real_custom1", "s_real_custom2", "s_custom1", "s_custom2"):
                         continue
                     errors.append(f"Колонка '{result_column.name}' не найдена в таблице '{result_name}'")
                     continue

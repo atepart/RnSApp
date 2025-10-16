@@ -11,8 +11,9 @@ from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
 from application.calculations import CalculationService
 from domain.constants import DataTableColumns, ParamTableColumns
-from infrastructure.persistence_xlsx import load_cells_from_xlsx, save_cells_to_xlsx
+from domain.ports import CellDataIO
 from infrastructure.repository_memory import InMemoryCellRepository
+from infrastructure.xlsx_io import XlsxCellIO
 from ui.plotting_service import PlotService
 from ui.widgets import CellWidget, DataTable, ParamTable
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class RnSApp(QtWidgets.QMainWindow):
-    def __init__(self, repo: InMemoryCellRepository | None = None) -> None:
+    def __init__(self, repo: InMemoryCellRepository | None = None, excel_io: CellDataIO | None = None) -> None:
         super(RnSApp, self).__init__()
         self.setGeometry(100, 100, 1400, 900)
 
@@ -210,6 +211,7 @@ class RnSApp(QtWidgets.QMainWindow):
         toolbar.addAction(act_restore)
 
         self.repo = repo or InMemoryCellRepository()
+        self.excel_io: CellDataIO = excel_io or XlsxCellIO()
         self.calc = CalculationService(
             data_table=self.data_table,
             param_table=self.param_table,
@@ -332,6 +334,8 @@ class RnSApp(QtWidgets.QMainWindow):
             initial_data=self.data_table.dump_data(),
             rn_consistent=self.rn_consistent.value(),
             allowed_error=self.allowed_error.value(),
+            s_custom1=self.s_custom1.value(),
+            s_custom2=self.s_custom2.value(),
             s_real_1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_1),
             s_real_custom1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM1),
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
@@ -377,12 +381,10 @@ class RnSApp(QtWidgets.QMainWindow):
         if not file_name:
             return
         init_data = [(cell.name.text(), cell.drift.text(), cell.rns.text()) for cell in self.cell_widgets]
-        save_cells_to_xlsx(
+        self.excel_io.save(
             file_name=file_name,
             cell_grid_values=init_data,
             repo=self.repo,
-            data_headers=DataTableColumns.get_all_slugs(),
-            results_headers=ParamTableColumns.get_all_names(),
         )
 
     def reload_tables_from_cell_data(self, cell: int):
@@ -395,6 +397,13 @@ class RnSApp(QtWidgets.QMainWindow):
         self.set_active_cell(cell)
         self.rn_consistent.setValue(cell_data.rn_consistent)
         self.allowed_error.setValue(cell_data.allowed_error)
+        # Load nominal custom areas into input fields if present
+        with contextlib.suppress(Exception):
+            if getattr(cell_data, "s_custom1", None) not in (None, ""):
+                self.s_custom1.setValue(float(cell_data.s_custom1))
+        with contextlib.suppress(Exception):
+            if getattr(cell_data, "s_custom2", None) not in (None, ""):
+                self.s_custom2.setValue(float(cell_data.s_custom2))
 
     def set_active_cell(self, cell: int):
         for cw in self.cell_widgets:
@@ -445,15 +454,23 @@ class RnSApp(QtWidgets.QMainWindow):
         is_some_errors = False
         some_errors_text = ""
         try:
-            items, errors = load_cells_from_xlsx(fileName)
+            items, errors = self.excel_io.load(fileName)
+            first_cell = None
             for kw in items:
                 cell_item = self.repo.update_or_create_item(**kw)
+                if first_cell is None:
+                    first_cell = cell_item.cell
                 cell_widget = self.cell_widgets[cell_item.cell - 1]
                 cell_widget.name.setText(cell_item.name)
                 cell_widget.drift.setText(f"Уход: {round(cell_item.drift, 3)}")
                 cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
                 cell_widget.updateUI()
                 self.calculate_means()
+
+            # Load first imported cell into current tables (so ParamTable shows S_real_* etc.)
+            if first_cell is not None:
+                self.reload_tables_from_cell_data(first_cell)
+
             if errors:
                 is_some_errors = True
                 some_errors_text = "\n".join(errors)
