@@ -330,25 +330,26 @@ class RnSApp(QtWidgets.QMainWindow):
 
     def check_updates(self):
         # Phase 1: fetch releases in a worker thread
-        spinner = QtWidgets.QProgressDialog("Получение списка релизов...", "Закрыть", 0, 0, self)
+        spinner = QtWidgets.QProgressDialog("Получение списка релизов...", "Отмена", 0, 0, self)
         spinner.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
-        spinner.setAutoClose(False)
+        spinner.setAutoClose(True)
         spinner.show()
+
+        # Таймер на 10 секунд: по истечении — ошибка и закрытие
+        self._update_fetch_timer = QtCore.QTimer(self)
+        self._update_fetch_timer.setSingleShot(True)
+        self._update_fetch_timer.setInterval(10_000)
 
         thread = QtCore.QThread(self)
         worker = FetchReleasesWorker(REPO_SLUG, limit=10)
         worker.moveToThread(thread)
 
         def on_finished(releases: list):
+            self._update_fetch_timer.stop()
             thread.quit()
-            thread.wait()
             if not releases:
-                try:
-                    spinner.setLabelText("Не удалось получить список релизов. Попробуйте позже.")
-                    spinner.setRange(0, 1)
-                    spinner.setValue(1)
-                except Exception:
-                    pass
+                spinner.close()
+                QtWidgets.QMessageBox.critical(self, "Ошибка", "Не удалось получить список релизов. Попробуйте позже.")
                 return
             # Show picker dialog
             dlg = ReleasePickerDialog(releases, parent=self)
@@ -369,18 +370,20 @@ class RnSApp(QtWidgets.QMainWindow):
             self._download_and_install(url=selected.asset.download_url)
 
         def on_error(msg: str):
+            self._update_fetch_timer.stop()
             thread.quit()
-            thread.wait()
-            try:
-                spinner.setLabelText(f"Ошибка получения релизов: {msg}")
-                spinner.setRange(0, 1)
-                spinner.setValue(1)
-            except Exception:
-                pass
+            spinner.close()
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось получить список релизов: {msg}")
 
         def on_status(text: str):
             with contextlib.suppress(Exception):
                 spinner.setLabelText(text)
+
+        def on_timeout():
+            # Сигнал об ошибке по таймауту
+            thread.quit()
+            spinner.close()
+            QtWidgets.QMessageBox.critical(self, "Ошибка", "Таймаут: не удалось получить список релизов за 10 секунд")
 
         thread.started.connect(worker.run)
         worker.finished.connect(on_finished)
@@ -391,6 +394,8 @@ class RnSApp(QtWidgets.QMainWindow):
         worker.status.connect(lambda *_: None)
         thread.finished.connect(thread.deleteLater)
         thread.start()
+        self._update_fetch_timer.timeout.connect(on_timeout)
+        self._update_fetch_timer.start()
 
     def _download_and_install(self, url: str):
         prog = QtWidgets.QProgressDialog("Загрузка выбранной версии...", "Отмена", 0, 100, self)
@@ -402,6 +407,9 @@ class RnSApp(QtWidgets.QMainWindow):
         worker = DownloadWorker(url)
         worker.moveToThread(thread)
 
+        # Позволяем отменять загрузку
+        prog.canceled.connect(worker.cancel)
+
         def on_progress(done: int, total: int):
             if total and total > 0:
                 prog.setValue(min(100, int(done * 100 / total)))
@@ -409,7 +417,6 @@ class RnSApp(QtWidgets.QMainWindow):
         def on_finished(_zip: str, extracted: str):
             prog.close()
             thread.quit()
-            thread.wait()
             # Proceed to install flow
             if sys.platform.startswith("win"):
                 auto = QtWidgets.QMessageBox.question(
@@ -485,7 +492,6 @@ class RnSApp(QtWidgets.QMainWindow):
         def on_error(msg: str):
             prog.close()
             thread.quit()
-            thread.wait()
             QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить: {msg}")
 
         def on_status(text: str):

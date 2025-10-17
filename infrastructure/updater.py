@@ -15,6 +15,27 @@ from typing import Optional
 import requests
 
 
+class UpdateError(RuntimeError):
+    def __init__(self, message: str, *, url: str | None = None, status: int | None = None, body: str | None = None):
+        super().__init__(message)
+        self.url = url
+        self.status = status
+        self.body = body
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.url:
+            parts.append(f"URL: {self.url}")
+        if self.status is not None:
+            parts.append(f"HTTP: {self.status}")
+        if self.body:
+            snippet = self.body
+            if len(snippet) > 800:
+                snippet = snippet[:800] + "…"
+            parts.append(f"Body: {snippet}")
+        return "\n".join(parts)
+
+
 @dataclass
 class ReleaseAsset:
     name: str
@@ -75,9 +96,11 @@ def compare_tags(a: str, b: str) -> int:
 
 
 def _request_headers() -> dict[str, str]:
+    # Mimic curl for compatibility (as user's curl works reliably)
     hdrs = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "RnSApp-Updater/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "curl/8.0.1",
     }
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if token:
@@ -86,21 +109,40 @@ def _request_headers() -> dict[str, str]:
 
 
 def _http_get_json(url: str) -> list[dict] | dict:
-    logger.debug(f"HTTP GET JSON: {url}")
+    logger.info(f"GET {url}")
     try:
-        resp = requests.get(url, headers=_request_headers(), timeout=(5, 8))
-        resp.raise_for_status()
+        # Connect timeout 10s, read timeout 10s
+        resp = requests.get(url, headers=_request_headers(), timeout=(10, 10))
+        status = resp.status_code
+        logger.debug(f"Response status: {status}")
+        if status >= 400:
+            body = None
+            try:
+                j = resp.json()
+                body = j.get("message") if isinstance(j, dict) else str(j)
+            except Exception:
+                body = resp.text
+            raise UpdateError("GitHub API error", url=url, status=status, body=body)
+        return resp.json()
+    except requests.Timeout as e:
+        logger.error(f"GitHub API timeout: {e}")
+        raise UpdateError("GitHub API timeout (10s)", url=url) from e
+    except requests.ConnectionError as e:
+        logger.error(f"GitHub connection error: {e}")
+        raise UpdateError("GitHub connection error", url=url) from e
     except requests.RequestException as e:
-        logger.warning(f"GitHub API request failed: {e}")
-        raise
-    return resp.json()
+        logger.error(f"GitHub request error: {e}")
+        raise UpdateError("GitHub request error", url=url) from e
 
 
-def _http_download(url: str, dest_path: str, progress_cb=None):
+def _http_download(url: str, dest_path: str, progress_cb=None, should_cancel=None):
     logger.info(f"Downloading asset: {url}")
     try:
-        with requests.get(url, stream=True, timeout=(5, 30)) as r:
-            r.raise_for_status()
+        # Strict timeouts: connect 10s, read 10s
+        with requests.get(url, stream=True, timeout=(10, 10)) as r:
+            status = r.status_code
+            if status >= 400:
+                raise UpdateError("Asset download error", url=url, status=status, body=r.text)
             total = int(r.headers.get("Content-Length", "0") or 0)
             downloaded = 0
             chunk = 64 * 1024
@@ -108,6 +150,8 @@ def _http_download(url: str, dest_path: str, progress_cb=None):
                 for part in r.iter_content(chunk_size=chunk):
                     if not part:
                         continue
+                    if should_cancel and should_cancel():
+                        raise UpdateError("Download cancelled by user")
                     f.write(part)
                     downloaded += len(part)
                     if progress_cb:
@@ -115,9 +159,15 @@ def _http_download(url: str, dest_path: str, progress_cb=None):
                             progress_cb(downloaded, total)
                         except Exception:
                             pass
+    except requests.Timeout as e:
+        logger.error(f"Download timeout: {e}")
+        raise UpdateError("Download timeout (10s)", url=url) from e
+    except requests.ConnectionError as e:
+        logger.error(f"Download connection error: {e}")
+        raise UpdateError("Download connection error", url=url) from e
     except requests.RequestException as e:
         logger.error(f"Download failed: {e}")
-        raise
+        raise UpdateError("Download request error", url=url) from e
 
 
 def _is_frozen() -> bool:
@@ -131,31 +181,83 @@ def _app_dir() -> str:
     return os.path.abspath(os.path.dirname(sys.argv[0]))
 
 
-def _platform_asset_suffix(tag: str) -> Optional[str]:
-    system = platform.system()
-    if system == "Windows":
-        arch = "x86"  # current CI builds
-        return f"Windows_{arch}_{tag}.zip"
-    if system == "Darwin":
-        m = platform.machine().lower()
-        arch = "arm64" if m in ("arm64", "aarch64") else "x64"
-        return f"macOS_{arch}_{tag}.zip"
-    # For other platforms return None to indicate unsupported
-    return None
+def _normalize_arch() -> str:
+    m = platform.machine().lower()
+    # Common normalizations
+    if m in ("x86_64", "amd64", "x64"):
+        return "x64"
+    if m in ("i386", "i686", "x86"):
+        return "x86"
+    if m in ("arm64", "aarch64"):
+        return "arm64"
+    return m or "unknown"
 
 
 def _select_asset_for_current_platform(tag: str, assets: list[dict]) -> Optional[ReleaseAsset]:
-    suffix = _platform_asset_suffix(tag)
-    if not suffix:
-        return None
+    """Select a release asset that matches current OS/arch with flexible naming.
+
+    Tries multiple heuristics to match typical naming patterns. Prefers assets whose
+    name contains the tag and ends with .zip. Falls back to any OS/arch match.
+    """
+    system = platform.system().lower()
+    arch = _normalize_arch()
+
+    def is_zip(name: str) -> bool:
+        return name.lower().endswith(".zip")
+
+    def match_os(name: str) -> bool:
+        n = name.lower()
+        if system == "windows":
+            return any(k in n for k in ("windows", "win"))
+        if system == "darwin":
+            return any(k in n for k in ("macos", "darwin", "osx", "mac"))
+        return False
+
+    def match_arch(name: str) -> bool:
+        n = name.lower()
+        if arch == "x64":
+            return any(k in n for k in ("x64", "x86_64", "amd64", "win64", "64bit")) or not any(
+                k in n for k in ("x86", "i386", "win32", "32bit")
+            )
+        if arch == "x86":
+            return any(k in n for k in ("x86", "i386", "win32", "32bit"))
+        if arch == "arm64":
+            return any(k in n for k in ("arm64", "aarch64"))
+        # Unknown arch: don't filter out
+        return True
+
+    candidates: list[ReleaseAsset] = []
     for a in assets or []:
-        if isinstance(a, dict) and a.get("name", "").endswith(suffix):
-            return ReleaseAsset(
-                name=a.get("name", ""),
-                download_url=a.get("browser_download_url", ""),
+        if not isinstance(a, dict):
+            continue
+        name = a.get("name", "") or ""
+        url = a.get("browser_download_url", "") or ""
+        if not name or not url or not is_zip(name):
+            continue
+        if not match_os(name):
+            continue
+        if not match_arch(name):
+            continue
+        candidates.append(
+            ReleaseAsset(
+                name=name,
+                download_url=url,
                 size=a.get("size"),
             )
-    return None
+        )
+
+    if not candidates:
+        return None
+
+    # Prefer names containing the tag; then longer names (more specific)
+    def score(asset: ReleaseAsset) -> tuple[int, int]:
+        n = asset.name.lower()
+        return (1 if tag.lower() in n else 0, len(n))
+
+    candidates.sort(key=score, reverse=True)
+    return candidates[0]
+
+    # Note: function moved above with improved heuristics
 
 
 def find_latest_release(repo_slug: str) -> Optional[ReleaseInfo]:
@@ -168,17 +270,25 @@ def find_latest_release(repo_slug: str) -> Optional[ReleaseInfo]:
     if not isinstance(releases, list):
         return None
 
-    # Filter tags that match expected format
-    filtered: list[dict] = []
+    # Keep only tags matching our scheme, prepare tuples for robust sorting
+    prepared: list[tuple[tuple[int, int, int], dict]] = []
     for r in releases:
         tag = r.get("tag_name") or r.get("name") or ""
-        if _TAG_RE.match(tag):
-            filtered.append(r)
-    if not filtered:
+        if not _TAG_RE.match(tag):
+            continue
+        try:
+            num, beta = parse_tag(tag)
+        except ValueError:
+            continue
+        stable_flag = 1 if beta is None else 0  # stable preferred
+        beta_val = beta or 0
+        prepared.append(((num, stable_flag, beta_val), r))
+
+    if not prepared:
         return None
 
-    filtered.sort(key=lambda r: (parse_tag(r.get("tag_name") or r.get("name")), r.get("published_at") or ""))
-    latest = filtered[-1]
+    prepared.sort(key=lambda it: (it[0][0], it[0][1], it[0][2], (it[1].get("published_at") or "")), reverse=True)
+    latest = prepared[0][1]
     tag = latest.get("tag_name") or latest.get("name")
     published_at = latest.get("published_at")
     asset = _select_asset_for_current_platform(tag, latest.get("assets", []) or [])
@@ -186,22 +296,19 @@ def find_latest_release(repo_slug: str) -> Optional[ReleaseInfo]:
 
 
 def list_releases(repo_slug: str, limit: int = 10) -> list[ReleaseInfo]:
+    """Return up to `limit` latest releases as-is from GitHub.
+
+    No tag-format filtering; we rely on published order and platform asset matching.
+    """
     url = f"https://api.github.com/repos/{repo_slug}/releases?per_page={max(1, min(limit, 100))}"
     logger.info(f"Fetching releases: {url}")
-    try:
-        releases = _http_get_json(url)
-    except Exception as e:
-        logger.warning(f"Failed to fetch releases: {e}")
-        return []
+    releases = _http_get_json(url)
     if not isinstance(releases, list):
-        return []
+        raise UpdateError("Unexpected GitHub API response (not a list)", url=url, body=str(releases))
 
-    # Keep only tags matching our scheme
     items: list[ReleaseInfo] = []
     for r in releases:
         tag = r.get("tag_name") or r.get("name") or ""
-        if not _TAG_RE.match(tag):
-            continue
         ri = ReleaseInfo(
             tag=tag,
             published_at=r.get("published_at"),
@@ -210,15 +317,9 @@ def list_releases(repo_slug: str, limit: int = 10) -> list[ReleaseInfo]:
         )
         items.append(ri)
 
-    # Sort by semantic version then date
-    def sort_key(ri: ReleaseInfo):
-        num, beta = parse_tag(ri.tag)
-        stable_flag = 1 if beta is None else 0  # stable first
-        beta_val = beta or 0
-        return (num, stable_flag, beta_val, ri.published_at or "")
-
-    items.sort(key=sort_key, reverse=True)
-    logger.debug(f"Total releases after filter: {len(items)}")
+    # Sort by published_at desc as primary order (GitHub already returns latest first)
+    items.sort(key=lambda ri: (ri.published_at or ""), reverse=True)
+    logger.info(f"Releases fetched: {len(items)}")
     return items[:limit]
 
 
@@ -226,24 +327,56 @@ def is_newer(tag_remote: str, tag_local: str) -> bool:
     return compare_tags(tag_remote, tag_local) > 0
 
 
-def stage_update_zip(asset_url: str, progress_cb=None) -> tuple[str, str]:
+def stage_update_zip(asset_url: str, progress_cb=None, should_cancel=None) -> tuple[str, str]:
     """Download zip to temp and extract; return (zip_path, extracted_root)."""
     tmp_dir = tempfile.mkdtemp(prefix="rns_update_")
     zip_path = os.path.join(tmp_dir, "update.zip")
-    _http_download(asset_url, zip_path, progress_cb=progress_cb)
+    _http_download(asset_url, zip_path, progress_cb=progress_cb, should_cancel=should_cancel)
 
     extracted_root = os.path.join(tmp_dir, "extracted")
     os.makedirs(extracted_root, exist_ok=True)
     logger.info(f"Extracting archive to: {extracted_root}")
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(extracted_root)
+        names = zf.namelist()
 
-    # Determine top-level folder inside zip
-    top_candidates = [name.split(os.sep)[0] for name in zf.namelist() if name and not name.endswith("/")]
-    top = top_candidates[0] if top_candidates else "RnSApp"
-    top_dir = os.path.join(extracted_root, top)
-    if not os.path.isdir(top_dir):
-        # Fallback: if contents extracted flat
+    # Determine top-level folder inside zip (zip uses '/' as separator)
+    def split_zip_path(p: str) -> list[str]:
+        return [part for part in p.replace("\\", "/").strip("/").split("/") if part]
+
+    tops: set[str] = set()
+    for name in names:
+        parts = split_zip_path(name)
+        if parts:
+            tops.add(parts[0])
+
+    top_dir = None
+    # Prefer bundle/exe container if present
+    for name in names:
+        parts = split_zip_path(name)
+        if not parts:
+            continue
+        if parts[-1].lower() == "rnsapp.exe" and len(parts) >= 2:
+            cand = os.path.join(extracted_root, *parts[:-1])
+            if os.path.isdir(cand):
+                top_dir = cand
+                break
+        if parts[0].lower().endswith(".app"):
+            cand = os.path.join(extracted_root, parts[0])
+            if os.path.isdir(cand):
+                top_dir = cand
+                break
+
+    if not top_dir:
+        if "RnSApp" in tops:
+            cand = os.path.join(extracted_root, "RnSApp")
+            top_dir = cand if os.path.isdir(cand) else None
+        if not top_dir and len(tops) == 1:
+            only = next(iter(tops))
+            cand = os.path.join(extracted_root, only)
+            top_dir = cand if os.path.isdir(cand) else None
+    if not top_dir:
+        # Fallback: if contents extracted flat or cannot determine
         top_dir = extracted_root
     logger.info(f"Update staged. zip={zip_path}, top={top_dir}")
     return zip_path, top_dir
@@ -303,8 +436,13 @@ def launch_updater_and_quit(new_dir: str):
         raise RuntimeError("Auto-update launch is only implemented for Windows.")
     dst = _app_dir()
     bat = write_windows_updater_script(src_dir=new_dir, dst_dir=dst)
-    # Launch detached
-    os.spawnl(os.P_NOWAIT, os.environ.get("COMSPEC", "C:\\Windows\\System32\\cmd.exe"), "cmd", "/c", bat)
+    # Launch detached (ensure script path is quoted in case of spaces)
+    comspec = os.environ.get("COMSPEC", r"C:\\Windows\\System32\\cmd.exe")
+    try:
+        os.spawnl(os.P_NOWAIT, comspec, "cmd.exe", "/c", f'"{bat}"')
+    except Exception:
+        # Fallback: try without quoting
+        os.spawnl(os.P_NOWAIT, comspec, "cmd.exe", "/c", bat)
     # Give a moment for the batch to start
     time.sleep(0.5)
     # Exit current app

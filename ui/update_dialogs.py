@@ -20,6 +20,10 @@ class FetchReleasesWorker(QtCore.QObject):
         try:
             self.status.emit("Подключение к GitHub API...")
             releases = list_releases(self._repo, self._limit)
+            if not releases:
+                # Считаем отсутствующий список релизов ошибкой, чтобы UI показал диалог
+                self.error.emit("Не удалось получить список релизов")
+                return
             avail = sum(1 for r in releases if getattr(r, "asset", None) and getattr(r.asset, "download_url", ""))
             self.status.emit(f"Получено релизов: {len(releases)} (доступно для вашей платформы: {avail})")
             self.finished.emit(releases)
@@ -36,6 +40,11 @@ class DownloadWorker(QtCore.QObject):
     def __init__(self, url: str) -> None:
         super().__init__()
         self._url = url
+        self._cancelled = False
+
+    @QtCore.Slot()
+    def cancel(self):
+        self._cancelled = True
 
     @QtCore.Slot()
     def run(self):
@@ -50,7 +59,7 @@ class DownloadWorker(QtCore.QObject):
                     self.status.emit(f"Загрузка: {done // 1024} КБ...")
 
             self.status.emit("Старт загрузки архива...")
-            zip_path, extracted = stage_update_zip(self._url, progress_cb=cb)
+            zip_path, extracted = stage_update_zip(self._url, progress_cb=cb, should_cancel=lambda: self._cancelled)
             self.status.emit("Распаковка архива...")
             # stage_update_zip уже распаковал; просто сообщим об окончании
             self.finished.emit(zip_path, extracted)
