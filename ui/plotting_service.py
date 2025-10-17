@@ -141,7 +141,7 @@ class PlotService:
 
         # Color by cell number
         color = PLOT_COLORS[cell - 1]
-        pen = pg.mkPen(color=color, width=2)
+        pen = pg.mkPen(color=color, width=3)
 
         # Remove previous items for this cell (data and fit) if exist
         plotItem = self.plot.getPlotItem()
@@ -158,7 +158,7 @@ class PlotService:
             name=f"{item.name} (data)",
             pen=None,
             symbol="o",
-            symbolSize=7,
+            symbolSize=6,
             symbolBrush=color,
             symbolPen=pen,
         )

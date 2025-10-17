@@ -1,6 +1,6 @@
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from domain.constants import ParamTableColumns
+from domain.constants import ACTIVE_CELL_COLOR, ParamTableColumns
 
 
 class CellWidget(QtWidgets.QGroupBox):
@@ -177,5 +177,9 @@ class CellWidget(QtWidgets.QGroupBox):
     def set_active(self, value: bool):
         if value:
             self.number.setText(f"<b>№{self.index}</b>")
+            # Pale light red/pink background for active cell
+            self.setStyleSheet(f"QGroupBox {{ background-color: {ACTIVE_CELL_COLOR}; }}")
         else:
             self.number.setText(f"№{self.index}")
+            # Reset background when inactive
+            self.setStyleSheet("")
