@@ -1,21 +1,25 @@
 import contextlib
 import logging
 import os
+import sys
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
 from application.calculations import CalculationService
+from application.version import REPO_SLUG, __version__
 from domain.constants import DataTableColumns, ParamTableColumns
 from domain.ports import CellDataIO
 from infrastructure.repository_memory import InMemoryCellRepository
+from infrastructure.updater import get_app_dir, launch_macos_updater_and_quit, launch_updater_and_quit
 from infrastructure.xlsx_io import XlsxCellIO
 from ui.plotting_service import PlotService
+from ui.update_dialogs import DownloadWorker, FetchReleasesWorker, ReleasePickerDialog
 from ui.widgets import CellWidget, DataTable, ParamTable
 
 logger = logging.getLogger(__name__)
@@ -211,6 +215,15 @@ class RnSApp(QtWidgets.QMainWindow):
         act_restore.triggered.connect(self.restore_default_layout)
         toolbar.addAction(act_restore)
 
+        # Menu: Help
+        help_menu = self.menuBar().addMenu("Справка")
+        act_about = QAction("О программе", self)
+        act_about.triggered.connect(self.show_about)
+        help_menu.addAction(act_about)
+        act_check_update = QAction("Проверить обновления", self)
+        act_check_update.triggered.connect(self.check_updates)
+        help_menu.addAction(act_check_update)
+
         self.repo = repo or InMemoryCellRepository()
         self.excel_io: CellDataIO = excel_io or XlsxCellIO()
         self.active_cell_index: int | None = None
@@ -307,6 +320,220 @@ class RnSApp(QtWidgets.QMainWindow):
         # Persist current layout as the new state
         with contextlib.suppress(Exception):
             self.save_settings()
+
+    def show_about(self):
+        QtWidgets.QMessageBox.information(
+            self,
+            "О программе",
+            f"RnSApp\nВерсия: {__version__}",
+        )
+
+    def check_updates(self):
+        # Phase 1: fetch releases in a worker thread
+        spinner = QtWidgets.QProgressDialog("Получение списка релизов...", "Закрыть", 0, 0, self)
+        spinner.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+        spinner.setAutoClose(False)
+        spinner.show()
+
+        thread = QtCore.QThread(self)
+        worker = FetchReleasesWorker(REPO_SLUG, limit=10)
+        worker.moveToThread(thread)
+
+        def on_finished(releases: list):
+            thread.quit()
+            thread.wait()
+            if not releases:
+                try:
+                    spinner.setLabelText("Не удалось получить список релизов. Попробуйте позже.")
+                    spinner.setRange(0, 1)
+                    spinner.setValue(1)
+                except Exception:
+                    pass
+                return
+            # Show picker dialog
+            dlg = ReleasePickerDialog(releases, parent=self)
+            if dlg.exec() != QtWidgets.QDialog.Accepted or not dlg.selected:
+                spinner.close()
+                return
+            selected = dlg.selected
+            if not getattr(selected, "asset", None) or not selected.asset.download_url:
+                try:
+                    spinner.setLabelText("В выбранном релизе нет файла для вашей платформы.")
+                    spinner.setRange(0, 1)
+                    spinner.setValue(1)
+                except Exception:
+                    pass
+                return
+            # Phase 2: download in worker
+            spinner.close()
+            self._download_and_install(url=selected.asset.download_url)
+
+        def on_error(msg: str):
+            thread.quit()
+            thread.wait()
+            try:
+                spinner.setLabelText(f"Ошибка получения релизов: {msg}")
+                spinner.setRange(0, 1)
+                spinner.setValue(1)
+            except Exception:
+                pass
+
+        def on_status(text: str):
+            with contextlib.suppress(Exception):
+                spinner.setLabelText(text)
+
+        thread.started.connect(worker.run)
+        worker.finished.connect(on_finished)
+        worker.error.connect(on_error)
+        worker.status.connect(on_status)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(worker.deleteLater)
+        worker.status.connect(lambda *_: None)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    def _download_and_install(self, url: str):
+        prog = QtWidgets.QProgressDialog("Загрузка выбранной версии...", "Отмена", 0, 100, self)
+        prog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+        prog.setAutoClose(True)
+        prog.show()
+
+        thread = QtCore.QThread(self)
+        worker = DownloadWorker(url)
+        worker.moveToThread(thread)
+
+        def on_progress(done: int, total: int):
+            if total and total > 0:
+                prog.setValue(min(100, int(done * 100 / total)))
+
+        def on_finished(_zip: str, extracted: str):
+            prog.close()
+            thread.quit()
+            thread.wait()
+            # Proceed to install flow
+            if sys.platform.startswith("win"):
+                auto = QtWidgets.QMessageBox.question(
+                    self,
+                    "Установка обновления",
+                    "Обновить автоматически (приложение будет перезапущено)?\n"
+                    "Или открыть папку с новой версией для ручной установки?",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.Yes,
+                )
+                if auto == QtWidgets.QMessageBox.Yes:
+                    try:
+                        launch_updater_and_quit(new_dir=extracted)
+                    except Exception as e:
+                        QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось запустить установщик: {e}")
+                # В любом случае, если дошли сюда — откроем папки для ручной установки
+                try:
+                    cur = get_app_dir()
+                    self.show_manual_update_instructions(extracted, cur)
+                    if sys.platform.startswith("win"):
+                        os.startfile(extracted)
+                        os.startfile(cur)
+                    elif sys.platform == "darwin":
+                        import subprocess
+
+                        subprocess.Popen(["open", extracted])
+                        subprocess.Popen(["open", cur])
+                    else:
+                        import subprocess
+
+                        subprocess.Popen(["xdg-open", extracted])
+                        subprocess.Popen(["xdg-open", cur])
+                except Exception:
+                    pass
+                return
+            # macOS flow
+            if sys.platform == "darwin":
+                auto = QtWidgets.QMessageBox.question(
+                    self,
+                    "Установка обновления (macOS)",
+                    "Обновить автоматически (приложение будет перезапущено)?\n"
+                    "Или открыть папки для ручной установки?",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.Yes,
+                )
+                if auto == QtWidgets.QMessageBox.Yes:
+                    try:
+                        launch_macos_updater_and_quit(new_app_path=extracted)
+                    except Exception as e:
+                        QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось запустить установщик: {e}")
+                    # Если не удалось — продолжим с ручным сценарием ниже
+
+            # Manual fallback
+            try:
+                cur = get_app_dir()
+                self.show_manual_update_instructions(extracted, cur)
+                if sys.platform.startswith("win"):
+                    os.startfile(extracted)
+                    os.startfile(cur)
+                elif sys.platform == "darwin":
+                    import subprocess
+
+                    subprocess.Popen(["open", extracted])
+                    subprocess.Popen(["open", cur])
+                else:
+                    import subprocess
+
+                    subprocess.Popen(["xdg-open", extracted])
+                    subprocess.Popen(["xdg-open", cur])
+            except Exception:
+                pass
+
+        def on_error(msg: str):
+            prog.close()
+            thread.quit()
+            thread.wait()
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить: {msg}")
+
+        def on_status(text: str):
+            with contextlib.suppress(Exception):
+                prog.setLabelText(text)
+
+        thread.started.connect(worker.run)
+        worker.progress.connect(on_progress)
+        worker.finished.connect(on_finished)
+        worker.error.connect(on_error)
+        worker.status.connect(on_status)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(worker.deleteLater)
+        worker.status.connect(lambda *_: None)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    def show_manual_update_instructions(self, new_dir: str, current_dir: str) -> None:
+        try:
+            if sys.platform == "darwin":
+                text = (
+                    "Обновление вручную (macOS):\n\n"
+                    "1) Закройте RnSApp, если оно открыто.\n"
+                    "2) В открывшихся окнах найдите:\n"
+                    f"   - Новая версия: {new_dir}\n"
+                    f"   - Текущая версия: {current_dir}\n"
+                    "3) Перетащите 'RnSApp.app' из новой папки в текущую и согласитесь на замену.\n"
+                    "4) Откройте 'RnSApp.app'. Если появится предупреждение, используйте Контекстное меню → Открыть.\n"
+                )
+            elif sys.platform.startswith("win"):
+                text = (
+                    "Обновление вручную (Windows):\n\n"
+                    "1) Убедитесь, что RnSApp закрыто.\n"
+                    "2) В открывшихся окнах найдите:\n"
+                    f"   - Новая версия: {new_dir}\n"
+                    f"   - Текущая версия: {current_dir}\n"
+                    "3) Скопируйте содержимое новой папки 'RnSApp' поверх текущей 'RnSApp' (с заменой файлов)\n"
+                    "   или удалите старую папку и переместите новую на её место.\n"
+                    "4) Запустите 'RnSApp.exe'.\n"
+                )
+            else:
+                text = (
+                    "Обновление вручную: закройте приложение, скопируйте файлы из новой папки в текущую с заменой, затем запустите заново.\n"
+                    f"Новая: {new_dir}\nТекущая: {current_dir}"
+                )
+            QtWidgets.QMessageBox.information(self, "Ручное обновление", text)
+        except Exception:
+            pass
 
     def closeEvent(self, event):
         with contextlib.suppress(Exception):
