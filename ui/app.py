@@ -69,7 +69,7 @@ class RnSApp(QtWidgets.QMainWindow):
         self.allowed_error = QtWidgets.QDoubleSpinBox(self)
         self.allowed_error.setRange(0, 100)
         self.allowed_error.setDecimals(2)
-        self.allowed_error.setValue(0)
+        self.allowed_error.setValue(2.5)
 
         # Контейнер без заголовка; сами ячейки остаются группами
         self.cell_group = QtWidgets.QWidget()
@@ -149,9 +149,9 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_grid.addWidget(QtWidgets.QLabel("Допустимое отклонение (%):"), 0, 2)
         inputs_grid.addWidget(self.allowed_error, 0, 3)
         # Row 1
-        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S1 (μm²):"), 1, 0)
+        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S2 (μm²):"), 1, 0)
         inputs_grid.addWidget(self.s_custom1, 1, 1)
-        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S2 (μm²):"), 1, 2)
+        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S3 (μm²):"), 1, 2)
         inputs_grid.addWidget(self.s_custom2, 1, 3)
         inputs_layout.addLayout(inputs_grid)
         inputs_layout.addStretch(1)

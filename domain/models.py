@@ -70,7 +70,7 @@ class Item:
         rns_error: float,
         initial_data: InitialDataItemList,
         rn_consistent: float = 0,
-        allowed_error: float = 0,
+        allowed_error: float = 2.5,
         s_custom1: float = 1.0,
         s_custom2: float = 1.0,
         s_real_1: float = 0,
