@@ -93,7 +93,17 @@ class CellWidget(QtWidgets.QGroupBox):
                 cell_data.is_plot = False
 
     def openRenameDialog(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, "Переименование", "Введите новое имя:")
+        # Prefill dialog with current name
+        current = self.name.text() or ""
+        name, ok = QtWidgets.QInputDialog.getText(
+            self,
+            "Переименование",
+            "Введите новое имя:",
+            QtWidgets.QLineEdit.EchoMode.Normal,
+            current,
+        )
+        if ok:
+            name = name.strip()
         if name and ok:
             if any(it.name == name and it.cell != self.index for it in self.app.repo):
                 QtWidgets.QMessageBox.warning(self, "Ошибка", "Это имя уже существует. Пожалуйста, введите другое имя.")
