@@ -213,6 +213,7 @@ class RnSApp(QtWidgets.QMainWindow):
 
         self.repo = repo or InMemoryCellRepository()
         self.excel_io: CellDataIO = excel_io or XlsxCellIO()
+        self.active_cell_index: int | None = None
         self.calc = CalculationService(
             data_table=self.data_table,
             param_table=self.param_table,
@@ -348,6 +349,10 @@ class RnSApp(QtWidgets.QMainWindow):
         if not self.calc.calculate_results():
             return
         self.plot_current_data()
+        # Update dirty flag for active cell if any
+        with contextlib.suppress(Exception):
+            if self.active_cell_index:
+                self._update_dirty_flag_for_cell(self.active_cell_index)
 
     def plot_current_data(self):
         return self.plot_service.plot_current_data()
@@ -374,6 +379,59 @@ class RnSApp(QtWidgets.QMainWindow):
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
         )
         self.set_active_cell(cell)
+        # After saving, clear dirty indicator for this cell
+        with contextlib.suppress(Exception):
+            self.cell_widgets[cell - 1].set_dirty(False)
+
+    # ---- Helpers to detect unsaved changes for active cell ----
+    def _param_table_snapshot(self) -> dict:
+        values = {}
+        for col in ParamTableColumns:
+            with contextlib.suppress(Exception):
+                values[col.slug] = self.param_table.get_column_value(0, col)
+        return values
+
+    @staticmethod
+    def _float_equal(a, b, tol: float = 1e-6) -> bool:
+        if a in (None, "") and b in (None, ""):
+            return True
+        try:
+            fa = float(a)
+            fb = float(b)
+            return abs(fa - fb) <= tol
+        except Exception:
+            return a == b
+
+    def _update_dirty_flag_for_cell(self, cell: int) -> None:
+        item = self.repo.get(cell=cell)
+        if not item:
+            return
+        snap = self._param_table_snapshot()
+        compare_cols = [
+            ParamTableColumns.SLOPE,
+            ParamTableColumns.INTERCEPT,
+            ParamTableColumns.DRIFT,
+            ParamTableColumns.RNS,
+            ParamTableColumns.DRIFT_ERROR,
+            ParamTableColumns.RNS_ERROR,
+            ParamTableColumns.RN_CONSISTENT,
+            ParamTableColumns.ALLOWED_ERROR,
+            ParamTableColumns.S_REAL_1,
+            ParamTableColumns.S_REAL_CUSTOM1,
+            ParamTableColumns.S_REAL_CUSTOM2,
+        ]
+        # Include custom area inputs if available
+        with contextlib.suppress(Exception):
+            compare_cols.extend([ParamTableColumns.S_CUSTOM1, ParamTableColumns.S_CUSTOM2])
+        is_dirty = False
+        for col in compare_cols:
+            saved_val = getattr(item, col.slug, None)
+            curr_val = snap.get(col.slug)
+            if not self._float_equal(saved_val, curr_val):
+                is_dirty = True
+                break
+        with contextlib.suppress(Exception):
+            self.cell_widgets[cell - 1].set_dirty(is_dirty)
 
     def plot_data(self, cell: int):
         return self.plot_service.plot_cell(cell=cell, repo=self.repo)
@@ -439,13 +497,19 @@ class RnSApp(QtWidgets.QMainWindow):
         with contextlib.suppress(Exception):
             if getattr(cell_data, "s_custom2", None) not in (None, ""):
                 self.s_custom2.setValue(float(cell_data.s_custom2))
+        # Clear dirty flag on load
+        with contextlib.suppress(Exception):
+            self.cell_widgets[cell - 1].set_dirty(False)
 
     def set_active_cell(self, cell: int):
+        self.active_cell_index = cell if cell else None
         for cw in self.cell_widgets:
-            if cw.index == cell:
-                cw.set_active(True)
-                continue
-            cw.set_active(False)
+            is_active = cw.index == cell
+            cw.set_active(is_active)
+            # Star appears only on active cell; hide for others when switching
+            with contextlib.suppress(Exception):
+                if not is_active:
+                    cw.set_dirty(False)
 
     def clear_cell_data(self):
         reply = QtWidgets.QMessageBox.question(

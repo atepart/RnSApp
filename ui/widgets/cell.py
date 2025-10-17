@@ -20,6 +20,13 @@ class CellWidget(QtWidgets.QGroupBox):
         self.number.setText(f"№{self.index}")
         hlayout1.addWidget(self.number)
 
+        # Dirty indicator star (hidden by default), sits next to number
+        self.dirty_star = QtWidgets.QLabel(self)
+        self.dirty_star.setText("*")
+        self.dirty_star.setStyleSheet("color: #D32F2F; font-weight: bold;")
+        self.dirty_star.setVisible(False)
+        hlayout1.addWidget(self.dirty_star)
+
         self.name = QtWidgets.QLabel(self)
         hlayout1.addWidget(self.name)
 
@@ -183,3 +190,6 @@ class CellWidget(QtWidgets.QGroupBox):
             self.number.setText(f"№{self.index}")
             # Reset background when inactive
             self.setStyleSheet("")
+
+    def set_dirty(self, value: bool):
+        self.dirty_star.setVisible(bool(value))
