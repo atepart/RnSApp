@@ -110,4 +110,12 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
 
     def is_empty(self):
-        return not all(self.item(0, param.index).text() for param in ParamTableColumns)
+        # Consider the table non-empty if key computed fields are present.
+        # Optional/hidden columns (e.g., custom areas, stored inputs) may remain empty
+        # and should not block the "Записать" action.
+        required = [ParamTableColumns.DRIFT, ParamTableColumns.RNS]
+        for col in required:
+            item = self.item(0, col.index)
+            if not item or not (item.text() and item.text().strip()):
+                return True
+        return False

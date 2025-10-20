@@ -43,7 +43,7 @@ class RnSApp(QtWidgets.QMainWindow):
         self.actions_group = QtWidgets.QWidget()
         self.actions_layout = QtWidgets.QHBoxLayout()
 
-        self.result_button = QtWidgets.QPushButton("Расcчитать")
+        self.result_button = QtWidgets.QPushButton("Рассчитать")
         self.result_button.setToolTip("Произвести расчеты")
         self.result_button.clicked.connect(self.calculate_results)
 
