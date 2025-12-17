@@ -2,6 +2,7 @@ import contextlib
 import re
 from typing import Any, Dict, List, Tuple
 
+import numpy as np
 import openpyxl
 from openpyxl.chart import Reference, ScatterChart, Series
 from openpyxl.chart.axis import ChartLines
@@ -15,6 +16,16 @@ from openpyxl.utils import get_column_letter
 from domain.constants import BLUE, RED, DataTableColumns, ParamTableColumns
 from domain.models import InitialDataItem, InitialDataItemList
 from domain.ports import CellDataIO, CellRepository
+from domain.utils import (
+    calculate_drift,
+    calculate_real_area,
+    calculate_rn_sqrt,
+    calculate_rns,
+    calculate_rns_per_sample,
+    calculate_square,
+    drop_nans,
+    linear_fit,
+)
 
 
 def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
@@ -223,6 +234,181 @@ class XlsxCellIO(CellDataIO):
                 if param.dtype is float and value not in (None, ""):
                     vcell.number_format = "0.000"
 
+            # Column mapping for clarity (Excel letters)
+            results_row = 2
+            data_col_idx = {
+                col: export_col_position.get(col.index)
+                for col in DataTableColumns
+                if export_col_position.get(col.index)
+            }
+            data_col_letter = {col: get_column_letter(idx) for col, idx in data_col_idx.items()}
+            result_col_idx = {param: results_start_col + param.index for param in ParamTableColumns}
+            result_col_letter = {param: get_column_letter(idx) for param, idx in result_col_idx.items()}
+
+            def data_ref(
+                col: DataTableColumns, row: int, absolute_col: bool = False, absolute_row: bool = False
+            ) -> str:
+                letter = data_col_letter.get(col)
+                if not letter:
+                    return ""
+                return f"{'$' if absolute_col else ''}{letter}{'$' if absolute_row else ''}{row}"
+
+            def result_ref(param: ParamTableColumns, row: int = results_row, absolute: bool = True) -> str:
+                letter = result_col_letter[param]
+                return f"${letter}${row}" if absolute else f"{letter}{row}"
+
+            def _last_non_empty(col_idx: int | None) -> int:
+                if col_idx is None:
+                    return 1
+                last = 1
+                for r in range(2, ws.max_row + 1):
+                    v = ws.cell(row=r, column=col_idx).value
+                    if v not in (None, ""):
+                        last = r
+                return last
+
+            diameter_col_idx = data_col_idx.get(DataTableColumns.DIAMETER)
+            resistance_col_idx = data_col_idx.get(DataTableColumns.RESISTANCE)
+            select_col_idx = data_col_idx.get(DataTableColumns.SELECT)
+            rn_sqrt_col_idx = data_col_idx.get(DataTableColumns.RN_SQRT)
+            rns_col_idx = data_col_idx.get(DataTableColumns.RNS)
+            rns_error_col_idx = data_col_idx.get(DataTableColumns.RNS_ERROR)
+            square_col_idx = data_col_idx.get(DataTableColumns.SQUARE)
+
+            data_max_row = max(_last_non_empty(diameter_col_idx), _last_non_empty(resistance_col_idx))
+            if data_max_row < 2:
+                data_max_row = 2
+
+            slope_ref = result_ref(ParamTableColumns.SLOPE)
+            intercept_ref = result_ref(ParamTableColumns.INTERCEPT)
+            drift_ref = result_ref(ParamTableColumns.DRIFT)
+            rns_res_ref = result_ref(ParamTableColumns.RNS)
+            rn_const_ref = result_ref(ParamTableColumns.RN_CONSISTENT)
+            s_custom1_ref = result_ref(ParamTableColumns.S_CUSTOM1)
+            s_custom2_ref = result_ref(ParamTableColumns.S_CUSTOM2)
+
+            rn_sqrt_range = (
+                f"{data_col_letter[DataTableColumns.RN_SQRT]}2:{data_col_letter[DataTableColumns.RN_SQRT]}{data_max_row}"
+                if DataTableColumns.RN_SQRT in data_col_letter
+                else None
+            )
+            diameter_range = (
+                f"{data_col_letter[DataTableColumns.DIAMETER]}2:{data_col_letter[DataTableColumns.DIAMETER]}{data_max_row}"
+                if DataTableColumns.DIAMETER in data_col_letter
+                else None
+            )
+
+            # Results formulas (slope/intercept/drift/RnS/errors/real areas) with IFERROR guards
+            if rn_sqrt_range and diameter_range:
+                slope_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.SLOPE])
+                slope_cell.value = (
+                    f'=IF(COUNT({rn_sqrt_range})<2,"",IFERROR(SLOPE({rn_sqrt_range},{diameter_range}),""))'
+                )
+                slope_cell.number_format = "0.0000"
+
+                intercept_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.INTERCEPT])
+                intercept_cell.value = (
+                    f'=IF(COUNT({rn_sqrt_range})<2,"",IFERROR(INTERCEPT({rn_sqrt_range},{diameter_range}),""))'
+                )
+                intercept_cell.number_format = "0.0000"
+
+            drift_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.DRIFT])
+            drift_cell.value = (
+                f'=IF(OR(ISBLANK({slope_ref}),{slope_ref}=0,ISBLANK({intercept_ref})),"",'
+                f'IFERROR(-{intercept_ref}/{slope_ref},""))'
+            )
+            drift_cell.number_format = "0.000"
+
+            rns_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.RNS])
+            rns_cell.value = f'=IF(OR(ISBLANK({slope_ref}),{slope_ref}=0),"",IFERROR(PI()*0.25/({slope_ref}^2),""))'
+            rns_cell.number_format = "0.000"
+
+            if rns_col_idx:
+                rns_range = (
+                    f"{data_col_letter[DataTableColumns.RNS]}2:{data_col_letter[DataTableColumns.RNS]}{data_max_row}"
+                )
+                rns_error_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.RNS_ERROR])
+                rns_error_cell.value = f'=IF(COUNT({rns_range})=0,"",IFERROR(STDEV.P({rns_range}),""))'
+                rns_error_cell.number_format = "0.000"
+
+            s_real1_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_1])
+            s_real1_cell.value = f'=IF(ISBLANK({drift_ref}),"",IFERROR(PI()*(SQRT(4*1/PI())-{drift_ref})^2/4,""))'
+            s_real1_cell.number_format = "0.000"
+
+            s_real_c1_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM1])
+            s_real_c1_cell.value = (
+                f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom1_ref})),"",'
+                f'IFERROR(PI()*(SQRT(4*{s_custom1_ref}/PI())-{drift_ref})^2/4,""))'
+            )
+            s_real_c1_cell.number_format = "0.000"
+
+            s_real_c2_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM2])
+            s_real_c2_cell.value = (
+                f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom2_ref})),"",'
+                f'IFERROR(PI()*(SQRT(4*{s_custom2_ref}/PI())-{drift_ref})^2/4,""))'
+            )
+            s_real_c2_cell.number_format = "0.000"
+
+            # Per-row formulas for derived values (Rn^-0.5, RnS, площадь, ошибка RnS)
+            for r in range(2, data_max_row + 1):
+                diam_v = ws.cell(row=r, column=diameter_col_idx).value if diameter_col_idx else None
+                res_v = ws.cell(row=r, column=resistance_col_idx).value if resistance_col_idx else None
+                if diam_v in (None, "") and res_v in (None, ""):
+                    continue
+
+                select_ref = None
+                if select_col_idx:
+                    select_ref = f"${get_column_letter(select_col_idx)}{r}"
+
+                if rn_sqrt_col_idx and resistance_col_idx:
+                    res_ref = data_ref(DataTableColumns.RESISTANCE, r)
+                    base = f"1/SQRT({res_ref}+{rn_const_ref})"
+                    core = f'IFERROR({base},"")'
+                    if select_ref:
+                        formula = f'=IF({select_ref},{core},"")'
+                    else:
+                        formula = f'=IF(OR(ISBLANK({res_ref}),ISBLANK({rn_const_ref})),"",{core})'
+                    cell = ws.cell(row=r, column=rn_sqrt_col_idx)
+                    cell.value = formula
+                    cell.number_format = "0.000"
+
+                if square_col_idx and diameter_col_idx:
+                    diam_ref = data_ref(DataTableColumns.DIAMETER, r)
+                    base = f"({diam_ref}-{drift_ref})^2*PI()/4"
+                    core = f'IFERROR({base},"")'
+                    if select_ref:
+                        formula = f'=IF({select_ref},{core},"")'
+                    else:
+                        formula = f'=IF(OR(ISBLANK({diam_ref}),ISBLANK({drift_ref})),"",{core})'
+                    cell = ws.cell(row=r, column=square_col_idx)
+                    cell.value = formula
+                    cell.number_format = "0.000"
+
+                if rns_col_idx and resistance_col_idx and diameter_col_idx:
+                    diam_ref = data_ref(DataTableColumns.DIAMETER, r)
+                    res_ref = data_ref(DataTableColumns.RESISTANCE, r)
+                    base = f"({res_ref}+{rn_const_ref})*PI()/4*({diam_ref}-{drift_ref})^2"
+                    core = f'IFERROR({base},"")'
+                    if select_ref:
+                        formula = f'=IF({select_ref},{core},"")'
+                    else:
+                        formula = f'=IF(OR(ISBLANK({res_ref}),ISBLANK({diam_ref}),ISBLANK({drift_ref})),"",{core})'
+                    cell = ws.cell(row=r, column=rns_col_idx)
+                    cell.value = formula
+                    cell.number_format = "0.000"
+
+                if rns_error_col_idx and rns_col_idx:
+                    rns_ref_row = data_ref(DataTableColumns.RNS, r)
+                    base = f"ABS({rns_ref_row}-{rns_res_ref})"
+                    core = f'IFERROR({base},"")'
+                    if select_ref:
+                        formula = f'=IF({select_ref},{core},"")'
+                    else:
+                        formula = f'=IF(ISBLANK({rns_ref_row}),"",{core})'
+                    cell = ws.cell(row=r, column=rns_error_col_idx)
+                    cell.value = formula
+                    cell.number_format = "0.000"
+
             # Build chart: Rn^-0.5 vs Диаметр ACAD (μm)
             try:
                 # Find exported columns for RN_SQRT and DIAMETER
@@ -363,9 +549,6 @@ class XlsxCellIO(CellDataIO):
         items: List[Dict[str, Any]] = []
         errors: List[str] = []
 
-        data_slugs = DataTableColumns.get_all_slugs()
-        # We'll accept that DRIFT may be absent in combined export
-
         for sheet_name in sheet_names:
             try:
                 i = int(re.findall(r"Cell №(\d+) ", sheet_name)[0])
@@ -386,18 +569,6 @@ class XlsxCellIO(CellDataIO):
                     key = val.strip()
                     header_positions.setdefault(key, []).append(c)
 
-            # Build initial data for all DataTableColumns
-            initial_data = InitialDataItemList()
-
-            # Determine how many data rows based on presence of any data in known data columns
-            def last_non_empty_row_for_col(col_idx: int) -> int:
-                last = 1
-                for r in range(2, ws.max_row + 1):
-                    v = ws.cell(row=r, column=col_idx).value
-                    if v not in (None, ""):
-                        last = r
-                return last
-
             def first_col_for(name: str) -> int | None:
                 pos = header_positions.get(name)
                 return pos[0] if pos else None
@@ -406,70 +577,210 @@ class XlsxCellIO(CellDataIO):
                 pos = header_positions.get(name)
                 return pos[-1] if pos else None
 
-            candidate_cols = [first_col_for(slug) for slug in data_slugs if first_col_for(slug)]
+            def read_cell(row: int, col: int | None) -> Any:
+                return ws.cell(row=row, column=col).value if col is not None else None
+
+            def to_float(val, default=None):
+                if val in (None, "", "None"):
+                    return default
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    s = val.replace(",", ".").strip()
+                    try:
+                        return float(s)
+                    except Exception:
+                        return default
+                return default
+
+            def to_bool(val) -> bool:
+                if val in (True, "TRUE", "True", "true", 1, "1"):
+                    return True
+                return False
+
+            def last_non_empty_row_for_col(col_idx: int | None) -> int:
+                if col_idx is None:
+                    return 1
+                last = 1
+                for r in range(2, ws.max_row + 1):
+                    v = ws.cell(row=r, column=col_idx).value
+                    if v not in (None, ""):
+                        last = r
+                return last
+
+            diameter_col = first_col_for(DataTableColumns.DIAMETER.slug)
+            resistance_col = first_col_for(DataTableColumns.RESISTANCE.slug)
+            select_col = first_col_for(DataTableColumns.SELECT.slug)
+            name_col = first_col_for(DataTableColumns.NAME.slug)
+            number_col = first_col_for(DataTableColumns.NUMBER.slug)
+
+            if diameter_col is None or resistance_col is None:
+                errors.append(f"Колонки с исходными данными не найдены в листе {sheet_name}")
+                continue
+
+            candidate_cols = [c for c in (diameter_col, resistance_col, name_col, number_col) if c]
             max_data_row = 2
             for c in candidate_cols:
                 max_data_row = max(max_data_row, last_non_empty_row_for_col(c))
 
-            # Now iterate each DataTableColumns member and collect values if present
-            for data_col in DataTableColumns:
-                col_idx = first_col_for(data_col.slug)
-                for row in range(2, max_data_row + 1):
-                    try:
-                        raw = ws.cell(row=row, column=col_idx).value if col_idx is not None else ""
-                        value = "" if raw in (None, "None", "") else raw
-                        # Normalize SELECT boolean as string 'True' or ''
-                        if data_col is DataTableColumns.SELECT:
-                            if raw in (True, "TRUE", "True", "true", 1, "1"):
-                                value = "True"
-                            else:
-                                value = ""
-                        initial_data.append(InitialDataItem(row=row - 2, col=data_col.index, value=value))
-                    except Exception:
-                        initial_data.append(InitialDataItem(row=row - 2, col=data_col.index, value=""))
-
-            # Build diameter_list and rn_sqrt_list for convenience (floats or None)
-            def list_from_initial(col: DataTableColumns):
-                vals = [v.value for v in initial_data.filter(col=col.index)]
-                out: List[Any] = []
-                for v in vals:
-                    try:
-                        out.append(float(v))
-                    except Exception:
-                        out.append(None)
-                return out
-
-            diameter_list = list_from_initial(DataTableColumns.DIAMETER)
-            rn_sqrt_list = list_from_initial(DataTableColumns.RN_SQRT)
-
-            # Results: read from headers with ParamTableColumns names (one row of values)
-            result_kwargs: Dict[str, Any] = {}
-            optional_slugs = {
-                ParamTableColumns.S_REAL_1.slug,
-                ParamTableColumns.S_REAL_CUSTOM1.slug,
-                ParamTableColumns.S_REAL_CUSTOM2.slug,
-                ParamTableColumns.S_CUSTOM1.slug,
-                ParamTableColumns.S_CUSTOM2.slug,
-            }
-            for param in ParamTableColumns:
+            # Input parameters stored in the results table (row 2)
+            def read_param(param: ParamTableColumns, default=None):
                 col = last_col_for(param.name)
-                value = ws.cell(row=2, column=col).value if col is not None else None
-                if value is None and param.slug in optional_slugs:
-                    # Optional
+                return to_float(read_cell(2, col), default)
+
+            rn_consistent = read_param(ParamTableColumns.RN_CONSISTENT, default=0.0)
+            allowed_error = read_param(ParamTableColumns.ALLOWED_ERROR, default=2.5)
+            s_custom1 = read_param(ParamTableColumns.S_CUSTOM1, default=1.0)
+            s_custom2 = read_param(ParamTableColumns.S_CUSTOM2, default=1.0)
+
+            rows_data: List[Dict[str, Any]] = []
+            for row in range(2, max_data_row + 1):
+                row_idx = row - 2
+                selected_raw = read_cell(row, select_col)
+                row_dict = {
+                    "row": row_idx,
+                    "number": read_cell(row, number_col) or row_idx + 1,
+                    "name": read_cell(row, name_col) or "",
+                    "selected": to_bool(selected_raw),
+                    "diameter": to_float(read_cell(row, diameter_col)),
+                    "resistance": to_float(read_cell(row, resistance_col)),
+                }
+                if not row_dict["selected"] and any(
+                    v is not None for v in (row_dict["diameter"], row_dict["resistance"])
+                ):
+                    # Treat rows with numeric data as selected even if checkbox is empty
+                    row_dict["selected"] = True
+                rows_data.append(row_dict)
+
+            # Calculate derived values based on parsed raw data
+            diameter_for_calc: List[float] = []
+            rn_sqrt_for_calc: List[float] = []
+            for rd in rows_data:
+                if not rd.get("selected"):
                     continue
-                if value is None:
-                    value = 0
-                result_kwargs[param.slug] = value
+                if rd.get("diameter") is None or rd.get("resistance") is None:
+                    continue
+                with contextlib.suppress(Exception):
+                    rn_sqrt_val = calculate_rn_sqrt(
+                        resistance=float(rd["resistance"]), rn_consistent=rn_consistent or 0.0
+                    )
+                    rd["rn_sqrt"] = rn_sqrt_val
+                    diameter_for_calc.append(float(rd["diameter"]))
+                    rn_sqrt_for_calc.append(float(rn_sqrt_val))
+
+            slope = intercept = drift = rns = 0.0
+            try:
+                diam_arr, rn_arr = drop_nans(diameter_for_calc, rn_sqrt_for_calc)
+            except Exception:
+                diam_arr, rn_arr = np.array([], dtype=float), np.array([], dtype=float)
+
+            def _is_nan(val: Any) -> bool:
+                try:
+                    return bool(np.isnan(float(val)))
+                except Exception:
+                    return False
+
+            if len(diam_arr) >= 2:
+                with contextlib.suppress(Exception):
+                    slope, intercept = linear_fit(diam_arr, rn_arr)
+            if _is_nan(slope):
+                slope = 0.0
+            if _is_nan(intercept):
+                intercept = 0.0
+            if slope not in (None, "", 0):
+                with contextlib.suppress(Exception):
+                    drift = calculate_drift(slope=slope, intercept=intercept)
+                with contextlib.suppress(Exception):
+                    rns = calculate_rns(slope)
+
+            rns_values: List[float] = []
+            for rd in rows_data:
+                if not rd.get("selected"):
+                    continue
+                if rd.get("diameter") is None or rd.get("resistance") is None:
+                    continue
+                with contextlib.suppress(Exception):
+                    rd["square"] = calculate_square(diameter=float(rd["diameter"]), drift=float(drift))
+                with contextlib.suppress(Exception):
+                    rns_val = calculate_rns_per_sample(
+                        resistance=float(rd["resistance"]),
+                        diameter=float(rd["diameter"]),
+                        drift=float(drift),
+                        rn_persistent=rn_consistent or 0.0,
+                    )
+                    rd["rns"] = rns_val
+                    rns_values.append(float(rns_val))
+
+            if rns_values:
+                try:
+                    rns_error = float(np.sqrt(np.sum((np.array(rns_values, dtype=float) - rns) ** 2) / len(rns_values)))
+                except Exception:
+                    rns_error = 0.0
+            else:
+                rns_error = 0.0
+
+            for rd in rows_data:
+                if not rd.get("selected"):
+                    continue
+                if "rns" in rd:
+                    with contextlib.suppress(Exception):
+                        rd["rns_error"] = abs(float(rd["rns"]) - float(rns))
+
+            def calc_area(area_nominal):
+                with contextlib.suppress(Exception):
+                    if area_nominal is None:
+                        return 0.0
+                    return calculate_real_area(area_nominal=float(area_nominal), drift=float(drift))
+                return 0.0
+
+            s_real_1 = calc_area(1.0)
+            s_real_c1 = calc_area(s_custom1)
+            s_real_c2 = calc_area(s_custom2)
+
+            initial_data = InitialDataItemList()
+
+            def add_item(row_idx: int, col: DataTableColumns, value: Any):
+                v = "" if value in (None, "") else value
+                initial_data.append(InitialDataItem(row=row_idx, col=col.index, value=v))
+
+            for rd in rows_data:
+                row_idx = rd["row"]
+                add_item(row_idx, DataTableColumns.NUMBER, rd.get("number") or row_idx + 1)
+                add_item(row_idx, DataTableColumns.NAME, rd.get("name") or "")
+                add_item(row_idx, DataTableColumns.SELECT, "True" if rd.get("selected") else "")
+                add_item(row_idx, DataTableColumns.DIAMETER, rd.get("diameter"))
+                add_item(row_idx, DataTableColumns.RESISTANCE, rd.get("resistance"))
+                add_item(row_idx, DataTableColumns.RNS, rd.get("rns"))
+                add_item(row_idx, DataTableColumns.RNS_ERROR, rd.get("rns_error"))
+                add_item(row_idx, DataTableColumns.DRIFT, drift if rd.get("selected") else "")
+                add_item(row_idx, DataTableColumns.SQUARE, rd.get("square"))
+                add_item(row_idx, DataTableColumns.RN_SQRT, rd.get("rn_sqrt"))
 
             items.append(
-                dict(
-                    cell=i,
-                    name=cell_name,
-                    diameter_list=diameter_list,
-                    rn_sqrt_list=rn_sqrt_list,
-                    initial_data=initial_data,
-                    **result_kwargs,
-                )
+                {
+                    "cell": i,
+                    "name": cell_name,
+                    "diameter_list": [
+                        rd.get("diameter") for rd in rows_data if rd.get("selected") and rd.get("diameter") is not None
+                    ],
+                    "rn_sqrt_list": [
+                        rd.get("rn_sqrt") for rd in rows_data if rd.get("selected") and rd.get("rn_sqrt") is not None
+                    ],
+                    "slope": slope,
+                    "intercept": intercept,
+                    "drift": drift,
+                    "rns": rns,
+                    "drift_error": 0.0,
+                    "rns_error": rns_error,
+                    "initial_data": initial_data,
+                    "rn_consistent": rn_consistent if rn_consistent is not None else 0.0,
+                    "allowed_error": allowed_error if allowed_error is not None else 0.0,
+                    "s_custom1": s_custom1 if s_custom1 is not None else 0.0,
+                    "s_custom2": s_custom2 if s_custom2 is not None else 0.0,
+                    "s_real_1": s_real_1,
+                    "s_real_custom1": s_real_c1,
+                    "s_real_custom2": s_real_c2,
+                }
             )
 
         return items, errors
