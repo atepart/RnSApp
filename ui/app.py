@@ -30,6 +30,11 @@ class RnSApp(QtWidgets.QMainWindow):
     def __init__(self, repo: InMemoryCellRepository | None = None, excel_io: CellDataIO | None = None) -> None:
         super(RnSApp, self).__init__()
         self.setGeometry(100, 100, 1400, 900)
+        # Keep references to background workers/threads to prevent GC-related crashes
+        self._update_fetch_thread = None
+        self._update_fetch_worker = None
+        self._update_fetch_timer = None
+        self._update_spinner = None
 
         self.setWindowIcon(QIcon("./assets/rns-logo-alt.ico"))
         # Табличка с данными без заголовка-лейбла
@@ -344,68 +349,104 @@ class RnSApp(QtWidgets.QMainWindow):
         spinner.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
         spinner.setAutoClose(True)
         spinner.show()
+        self._update_spinner = spinner
 
         # Таймер на 10 секунд: по истечении — ошибка и закрытие
-        self._update_fetch_timer = QtCore.QTimer(self)
-        self._update_fetch_timer.setSingleShot(True)
-        self._update_fetch_timer.setInterval(10_000)
+        timer = QtCore.QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(10_000)
+        self._update_fetch_timer = timer
 
         thread = QtCore.QThread(self)
         worker = FetchReleasesWorker(REPO_SLUG, limit=10)
         worker.moveToThread(thread)
-
-        def on_finished(releases: list):
-            self._update_fetch_timer.stop()
-            thread.quit()
-            if not releases:
-                spinner.close()
-                QtWidgets.QMessageBox.critical(self, "Ошибка", "Не удалось получить список релизов. Попробуйте позже.")
-                return
-            # Show picker dialog
-            dlg = ReleasePickerDialog(releases, parent=self)
-            if dlg.exec() != QtWidgets.QDialog.Accepted or not dlg.selected:
-                spinner.close()
-                return
-            selected = dlg.selected
-            if not getattr(selected, "asset", None) or not selected.asset.download_url:
-                try:
-                    spinner.setLabelText("В выбранном релизе нет файла для вашей платформы.")
-                    spinner.setRange(0, 1)
-                    spinner.setValue(1)
-                except Exception:
-                    pass
-                return
-            # Phase 2: download in worker
-            spinner.close()
-            self._download_and_install(url=selected.asset.download_url)
-
-        def on_error(msg: str):
-            self._update_fetch_timer.stop()
-            thread.quit()
-            spinner.close()
-            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось получить список релизов: {msg}")
-
-        def on_status(text: str):
-            with contextlib.suppress(Exception):
-                spinner.setLabelText(text)
-
-        def on_timeout():
-            # Сигнал об ошибке по таймауту
-            thread.quit()
-            spinner.close()
-            QtWidgets.QMessageBox.critical(self, "Ошибка", "Таймаут: не удалось получить список релизов за 10 секунд")
+        # Keep Python references to avoid premature GC that can crash Qt threads
+        self._update_fetch_thread = thread
+        self._update_fetch_worker = worker
 
         thread.started.connect(worker.run)
-        worker.finished.connect(on_finished)
-        worker.error.connect(on_error)
-        worker.status.connect(on_status)
+        connection_type = QtCore.Qt.QueuedConnection
+        worker.finished.connect(self._on_update_fetch_finished, connection_type)
+        worker.error.connect(self._on_update_fetch_error, connection_type)
+        worker.status.connect(self._on_update_fetch_status, connection_type)
         worker.finished.connect(worker.deleteLater)
         worker.error.connect(worker.deleteLater)
         worker.status.connect(lambda *_: None)
         thread.finished.connect(thread.deleteLater)
         thread.start()
-        self._update_fetch_timer.timeout.connect(on_timeout)
-        self._update_fetch_timer.start()
+        timer.timeout.connect(self._on_update_fetch_timeout, connection_type)
+        timer.start()
+
+    @QtCore.Slot(list)
+    def _on_update_fetch_finished(self, releases: list):
+        self._stop_update_timer()
+        thread = self._update_fetch_thread
+        if thread:
+            thread.quit()
+        spinner = self._update_spinner
+        self._update_fetch_thread = None
+        self._update_fetch_worker = None
+        self._update_spinner = None
+
+        if not releases:
+            if spinner:
+                spinner.close()
+            QtWidgets.QMessageBox.critical(self, "Ошибка", "Не удалось получить список релизов. Попробуйте позже.")
+            return
+
+        if spinner:
+            spinner.close()
+
+        # Show picker dialog on main thread
+        dlg = ReleasePickerDialog(releases, parent=self)
+        if dlg.exec() != QtWidgets.QDialog.Accepted or not dlg.selected:
+            return
+        selected = dlg.selected
+        if not getattr(selected, "asset", None) or not selected.asset.download_url:
+            QtWidgets.QMessageBox.information(self, "Нет файла", "В выбранном релизе нет файла для вашей платформы.")
+            return
+        # Phase 2: download in worker
+        self._download_and_install(url=selected.asset.download_url)
+
+    @QtCore.Slot(str)
+    def _on_update_fetch_error(self, msg: str):
+        self._stop_update_timer()
+        thread = self._update_fetch_thread
+        if thread:
+            thread.quit()
+        if self._update_spinner:
+            self._update_spinner.close()
+        self._update_fetch_thread = None
+        self._update_fetch_worker = None
+        self._update_spinner = None
+        QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось получить список релизов: {msg}")
+
+    @QtCore.Slot(str)
+    def _on_update_fetch_status(self, text: str):
+        spinner = self._update_spinner
+        if spinner:
+            with contextlib.suppress(Exception):
+                spinner.setLabelText(text)
+
+    @QtCore.Slot()
+    def _on_update_fetch_timeout(self):
+        self._stop_update_timer()
+        thread = self._update_fetch_thread
+        if thread:
+            thread.quit()
+        if self._update_spinner:
+            self._update_spinner.close()
+        self._update_fetch_thread = None
+        self._update_fetch_worker = None
+        self._update_spinner = None
+        QtWidgets.QMessageBox.critical(self, "Ошибка", "Таймаут: не удалось получить список релизов за 10 секунд")
+
+    def _stop_update_timer(self):
+        timer = self._update_fetch_timer
+        if timer:
+            with contextlib.suppress(Exception):
+                timer.stop()
+        self._update_fetch_timer = None
 
     def _download_and_install(self, url: str):
         prog = QtWidgets.QProgressDialog("Загрузка выбранной версии...", "Отмена", 0, 100, self)
@@ -509,10 +550,11 @@ class RnSApp(QtWidgets.QMainWindow):
                 prog.setLabelText(text)
 
         thread.started.connect(worker.run)
-        worker.progress.connect(on_progress)
-        worker.finished.connect(on_finished)
-        worker.error.connect(on_error)
-        worker.status.connect(on_status)
+        connection_type = QtCore.Qt.QueuedConnection
+        worker.progress.connect(on_progress, connection_type)
+        worker.finished.connect(on_finished, connection_type)
+        worker.error.connect(on_error, connection_type)
+        worker.status.connect(on_status, connection_type)
         worker.finished.connect(worker.deleteLater)
         worker.error.connect(worker.deleteLater)
         worker.status.connect(lambda *_: None)

@@ -5,6 +5,8 @@ import logging
 import os
 import platform
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -110,9 +112,11 @@ def _request_headers() -> dict[str, str]:
 
 def _http_get_json(url: str) -> list[dict] | dict:
     logger.info(f"GET {url}")
+    headers = _request_headers()
+    last_error: UpdateError | None = None
     try:
         # Connect timeout 10s, read timeout 10s
-        resp = requests.get(url, headers=_request_headers(), timeout=(10, 10))
+        resp = requests.get(url, headers=headers, timeout=(5, 10))
         status = resp.status_code
         logger.debug(f"Response status: {status}")
         if status >= 400:
@@ -126,13 +130,75 @@ def _http_get_json(url: str) -> list[dict] | dict:
         return resp.json()
     except requests.Timeout as e:
         logger.error(f"GitHub API timeout: {e}")
-        raise UpdateError("GitHub API timeout (10s)", url=url) from e
+        last_error = UpdateError("GitHub API timeout (connect 5s, read 10s)", url=url)
+    except requests.SSLError as e:
+        logger.error(f"GitHub SSL error: {e}")
+        last_error = UpdateError("GitHub SSL error", url=url, body=str(e))
     except requests.ConnectionError as e:
         logger.error(f"GitHub connection error: {e}")
-        raise UpdateError("GitHub connection error", url=url) from e
+        last_error = UpdateError("GitHub connection error", url=url, body=str(e))
     except requests.RequestException as e:
         logger.error(f"GitHub request error: {e}")
-        raise UpdateError("GitHub request error", url=url) from e
+        last_error = UpdateError("GitHub request error", url=url, body=str(e))
+    except ValueError as e:
+        logger.error(f"GitHub API returned invalid JSON: {e}")
+        last_error = UpdateError("GitHub API returned invalid JSON", url=url, body=str(e))
+
+    if last_error is None:
+        raise
+
+    # Fallback: try curl (uses system certificates; often succeeds where requests fails)
+    try:
+        return _http_get_json_via_curl(url, headers=headers)
+    except Exception as fallback_err:
+        logger.error(f"Curl fallback failed: {fallback_err}")
+        if isinstance(fallback_err, UpdateError):
+            raise fallback_err
+        raise last_error from fallback_err
+
+
+def _http_get_json_via_curl(url: str, headers: dict[str, str]) -> list[dict] | dict:
+    """Fetch JSON using curl as a fallback (better system CA compatibility)."""
+    if not shutil.which("curl"):
+        raise UpdateError("curl not found for GitHub API fallback", url=url)
+
+    cmd = [
+        "curl",
+        "-sSL",
+        "--connect-timeout",
+        "5",
+        "--max-time",
+        "10",
+    ]
+    for k, v in (headers or {}).items():
+        cmd.extend(["-H", f"{k}: {v}"])
+    # Write HTTP status to the end of stdout for parsing
+    cmd.extend(["-w", "\n%{http_code}\n", url])
+
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    stdout = proc.stdout or ""
+    stderr = proc.stderr or ""
+    if proc.returncode != 0:
+        raise UpdateError("GitHub API error (curl)", url=url, body=stderr or stdout)
+
+    body = stdout
+    status_code: int | None = None
+    if "\n" in stdout:
+        # Split off the trailing status line added by -w
+        body, _, status_line = stdout.rstrip("\n").rpartition("\n")
+        try:
+            status_code = int(status_line.strip())
+        except ValueError:
+            body = stdout
+            status_code = None
+
+    if status_code and status_code >= 400:
+        raise UpdateError("GitHub API error (curl)", url=url, status=status_code, body=body.strip())
+
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as e:
+        raise UpdateError("GitHub API returned invalid JSON (curl)", url=url, body=body[:800]) from e
 
 
 def _http_download(url: str, dest_path: str, progress_cb=None, should_cancel=None):
