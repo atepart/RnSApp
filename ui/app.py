@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QInputDialog
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
 from application.calculations import CalculationService
@@ -16,6 +16,7 @@ from application.version import REPO_SLUG, __version__
 from domain.constants import DataTableColumns, ParamTableColumns
 from domain.ports import CellDataIO
 from infrastructure.repository_memory import InMemoryCellRepository
+from infrastructure.template_io import load_template, save_template
 from infrastructure.updater import get_app_dir, launch_macos_updater_and_quit, launch_updater_and_quit
 from infrastructure.xlsx_io import XlsxCellIO
 from ui.plotting_service import PlotService
@@ -55,13 +56,18 @@ class RnSApp(QtWidgets.QMainWindow):
         self.clean_all_button.setToolTip("Очистить график и таблицы с даными и расчетом")
         self.clean_all_button.clicked.connect(self.clean_all)
 
+        self.open_template_button = QtWidgets.QPushButton("Открыть шаблон")
+        self.open_template_button.setToolTip("Загрузить шаблон данных (имена, диаметры, площади)")
+        self.open_template_button.clicked.connect(self.open_template)
+
         # Make buttons expand to fill the bottom row
-        for btn in (self.result_button, self.clean_rn_button, self.clean_all_button):
+        for btn in (self.result_button, self.clean_rn_button, self.clean_all_button, self.open_template_button):
             btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
 
         self.actions_layout.addWidget(self.result_button)
         self.actions_layout.addWidget(self.clean_rn_button)
         self.actions_layout.addWidget(self.clean_all_button)
+        self.actions_layout.addWidget(self.open_template_button)
         self.actions_group.setLayout(self.actions_layout)
 
         # Поля параметров ввода как аккуратные лейблы + спинбоксы
@@ -214,6 +220,10 @@ class RnSApp(QtWidgets.QMainWindow):
         act_restore.setToolTip("Построить расположение панелей по умолчанию")
         act_restore.triggered.connect(self.restore_default_layout)
         toolbar.addAction(act_restore)
+        act_create_template = QAction("Создать шаблон", self)
+        act_create_template.setToolTip("Сохранить шаблон с именами, диаметрами и площадями")
+        act_create_template.triggered.connect(self.create_template)
+        toolbar.addAction(act_create_template)
 
         # Menu: Help
         help_menu = self.menuBar().addMenu("Справка")
@@ -712,6 +722,107 @@ class RnSApp(QtWidgets.QMainWindow):
             cell_grid_values=init_data,
             repo=self.repo,
         )
+
+    def create_template(self):
+        name, ok = QInputDialog.getText(self, "Создать шаблон", "Введите уникальное имя шаблона:")
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            QtWidgets.QMessageBox.warning(self, "Пустое имя", "Имя шаблона не может быть пустым.")
+            return
+
+        start_dir = self._get_initial_directory()
+        default_path = os.path.join(start_dir, f"{name}.xlsx")
+        file_name, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Сохранить шаблон",
+            default_path,
+            "Excel Files (*.xlsx);;All Files (*)",
+        )
+        if not file_name:
+            return
+        if not file_name.endswith(".xlsx"):
+            file_name += ".xlsx"
+        if os.path.exists(file_name):
+            QtWidgets.QMessageBox.warning(
+                self, "Имя уже занято", "Файл с таким именем уже существует, выберите другое."
+            )
+            return
+
+        rows: list[dict] = []
+        for row in range(self.data_table.rowCount()):
+            name_item = self.data_table.item(row, DataTableColumns.NAME.index)
+            name_val = name_item.text().strip() if name_item and name_item.text() else ""
+            diam_item = self.data_table.item(row, DataTableColumns.DIAMETER.index)
+            diam_val = None
+            if diam_item and diam_item.text():
+                with contextlib.suppress(Exception):
+                    diam_val = float(str(diam_item.text()).replace(",", "."))
+            cb = self.data_table.get_row_checkbox(row)
+            selected = bool(cb.isChecked()) if cb else False
+            if any([name_val, selected, diam_val not in (None, "")]):
+                rows.append(
+                    {
+                        "number": row + 1,
+                        "name": name_val,
+                        "selected": selected,
+                        "diameter": diam_val,
+                    }
+                )
+
+        if not rows:
+            QtWidgets.QMessageBox.warning(self, "Нет данных", "Не заполнено ни одной строки для шаблона.")
+            return
+
+        areas = {
+            "s_custom1": float(self.s_custom1.value()) if self.s_custom1 is not None else None,
+            "s_custom2": float(self.s_custom2.value()) if self.s_custom2 is not None else None,
+        }
+
+        try:
+            saved_path = save_template(file_path=file_name, sheet_name=name, rows=rows, areas=areas)
+            self._remember_path(saved_path)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить шаблон: {e}")
+            logger.exception(e, exc_info=True)
+            return
+
+        QtWidgets.QMessageBox.information(self, "Готово", "Шаблон сохранён.")
+
+    def open_template(self):
+        options = QtWidgets.QFileDialog.Options()
+        start_dir = self._get_initial_directory()
+        file_name, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Открыть шаблон",
+            start_dir,
+            "Excel Files (*.xlsx);;All Files (*)",
+            options=options,
+        )
+        if not file_name:
+            return
+        self._remember_path(file_name)
+
+        try:
+            initial_data, areas, errors = load_template(file_name)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка чтения", f"Не удалось открыть шаблон: {e}")
+            logger.exception(e, exc_info=True)
+            return
+
+        self.clean_all()
+        self.data_table.load_data(initial_data)
+        with contextlib.suppress(Exception):
+            if areas.get("s_custom1") is not None:
+                self.s_custom1.setValue(float(areas["s_custom1"]))
+            if areas.get("s_custom2") is not None:
+                self.s_custom2.setValue(float(areas["s_custom2"]))
+
+        if errors:
+            QtWidgets.QMessageBox.warning(self, "Шаблон загружен с предупреждениями", "\n".join(errors))
+        else:
+            QtWidgets.QMessageBox.information(self, "Готово", "Шаблон загружен.")
 
     def reload_tables_from_cell_data(self, cell: int):
         cell_data = self.repo.get(cell=cell)
