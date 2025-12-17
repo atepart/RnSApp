@@ -91,8 +91,8 @@ class RnSApp(QtWidgets.QMainWindow):
         self.mean_drift = QtWidgets.QLabel("Средний уход: --", self)
         self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
 
-        self.btn_load_cell_data = QtWidgets.QPushButton("Загрузить из файла")
-        self.btn_load_cell_data.setToolTip("Загрузить данные из xlsx файла")
+        self.btn_load_cell_data = QtWidgets.QPushButton("Открыть")
+        self.btn_load_cell_data.setToolTip("Открыть данные из xlsx файла")
         self.btn_load_cell_data.clicked.connect(self.load_cell_data)
 
         self.btn_clear_cell_data = QtWidgets.QPushButton("Очистить ячейки")
