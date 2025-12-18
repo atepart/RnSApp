@@ -1,13 +1,12 @@
 import contextlib
 import logging
 import os
-import sys
 
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QDesktopServices, QIcon
 from PySide6.QtWidgets import QApplication, QInputDialog
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
@@ -17,10 +16,9 @@ from domain.constants import DataTableColumns, ParamTableColumns
 from domain.ports import CellDataIO
 from infrastructure.repository_memory import InMemoryCellRepository
 from infrastructure.template_io import load_template, save_template
-from infrastructure.updater import get_app_dir, launch_macos_updater_and_quit, launch_updater_and_quit
 from infrastructure.xlsx_io import XlsxCellIO
 from ui.plotting_service import PlotService
-from ui.update_dialogs import DownloadWorker, FetchReleasesWorker, ReleasePickerDialog
+from ui.update_dialogs import FetchReleasesWorker, ReleasePickerDialog
 from ui.widgets import CellWidget, DataTable, ParamTable
 
 logger = logging.getLogger(__name__)
@@ -356,6 +354,7 @@ class RnSApp(QtWidgets.QMainWindow):
         timer.setSingleShot(True)
         timer.setInterval(10_000)
         self._update_fetch_timer = timer
+        logger.info("Starting release fetch in background thread")
 
         thread = QtCore.QThread(self)
         worker = FetchReleasesWorker(REPO_SLUG, limit=10)
@@ -380,12 +379,8 @@ class RnSApp(QtWidgets.QMainWindow):
     @QtCore.Slot(list)
     def _on_update_fetch_finished(self, releases: list):
         self._stop_update_timer()
-        thread = self._update_fetch_thread
-        if thread:
-            thread.quit()
+        self._cleanup_update_thread(wait=True)
         spinner = self._update_spinner
-        self._update_fetch_thread = None
-        self._update_fetch_worker = None
         self._update_spinner = None
 
         if not releases:
@@ -405,19 +400,17 @@ class RnSApp(QtWidgets.QMainWindow):
         if not getattr(selected, "asset", None) or not selected.asset.download_url:
             QtWidgets.QMessageBox.information(self, "Нет файла", "В выбранном релизе нет файла для вашей платформы.")
             return
-        # Phase 2: download in worker
-        self._download_and_install(url=selected.asset.download_url)
+        # Только выводим ссылку на скачивание (без автоматической загрузки)
+        url = selected.asset.download_url
+        logger.info(f"Selected release: {selected.tag}, asset: {url}")
+        self._show_download_link(url)
 
     @QtCore.Slot(str)
     def _on_update_fetch_error(self, msg: str):
         self._stop_update_timer()
-        thread = self._update_fetch_thread
-        if thread:
-            thread.quit()
+        self._cleanup_update_thread(wait=True)
         if self._update_spinner:
             self._update_spinner.close()
-        self._update_fetch_thread = None
-        self._update_fetch_worker = None
         self._update_spinner = None
         QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось получить список релизов: {msg}")
 
@@ -431,13 +424,9 @@ class RnSApp(QtWidgets.QMainWindow):
     @QtCore.Slot()
     def _on_update_fetch_timeout(self):
         self._stop_update_timer()
-        thread = self._update_fetch_thread
-        if thread:
-            thread.quit()
+        self._cleanup_update_thread(wait=True)
         if self._update_spinner:
             self._update_spinner.close()
-        self._update_fetch_thread = None
-        self._update_fetch_worker = None
         self._update_spinner = None
         QtWidgets.QMessageBox.critical(self, "Ошибка", "Таймаут: не удалось получить список релизов за 10 секунд")
 
@@ -448,150 +437,16 @@ class RnSApp(QtWidgets.QMainWindow):
                 timer.stop()
         self._update_fetch_timer = None
 
-    def _download_and_install(self, url: str):
-        prog = QtWidgets.QProgressDialog("Загрузка выбранной версии...", "Отмена", 0, 100, self)
-        prog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
-        prog.setAutoClose(True)
-        prog.show()
-
-        thread = QtCore.QThread(self)
-        worker = DownloadWorker(url)
-        worker.moveToThread(thread)
-
-        # Позволяем отменять загрузку
-        prog.canceled.connect(worker.cancel)
-
-        def on_progress(done: int, total: int):
-            if total and total > 0:
-                prog.setValue(min(100, int(done * 100 / total)))
-
-        def on_finished(_zip: str, extracted: str):
-            prog.close()
-            thread.quit()
-            # Proceed to install flow
-            if sys.platform.startswith("win"):
-                auto = QtWidgets.QMessageBox.question(
-                    self,
-                    "Установка обновления",
-                    "Обновить автоматически (приложение будет перезапущено)?\n"
-                    "Или открыть папку с новой версией для ручной установки?",
-                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                    QtWidgets.QMessageBox.Yes,
-                )
-                if auto == QtWidgets.QMessageBox.Yes:
-                    try:
-                        launch_updater_and_quit(new_dir=extracted)
-                    except Exception as e:
-                        QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось запустить установщик: {e}")
-                # В любом случае, если дошли сюда — откроем папки для ручной установки
-                try:
-                    cur = get_app_dir()
-                    self.show_manual_update_instructions(extracted, cur)
-                    if sys.platform.startswith("win"):
-                        os.startfile(extracted)
-                        os.startfile(cur)
-                    elif sys.platform == "darwin":
-                        import subprocess
-
-                        subprocess.Popen(["open", extracted])
-                        subprocess.Popen(["open", cur])
-                    else:
-                        import subprocess
-
-                        subprocess.Popen(["xdg-open", extracted])
-                        subprocess.Popen(["xdg-open", cur])
-                except Exception:
-                    pass
-                return
-            # macOS flow
-            if sys.platform == "darwin":
-                auto = QtWidgets.QMessageBox.question(
-                    self,
-                    "Установка обновления (macOS)",
-                    "Обновить автоматически (приложение будет перезапущено)?\n"
-                    "Или открыть папки для ручной установки?",
-                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                    QtWidgets.QMessageBox.Yes,
-                )
-                if auto == QtWidgets.QMessageBox.Yes:
-                    try:
-                        launch_macos_updater_and_quit(new_app_path=extracted)
-                    except Exception as e:
-                        QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось запустить установщик: {e}")
-                    # Если не удалось — продолжим с ручным сценарием ниже
-
-            # Manual fallback
-            try:
-                cur = get_app_dir()
-                self.show_manual_update_instructions(extracted, cur)
-                if sys.platform.startswith("win"):
-                    os.startfile(extracted)
-                    os.startfile(cur)
-                elif sys.platform == "darwin":
-                    import subprocess
-
-                    subprocess.Popen(["open", extracted])
-                    subprocess.Popen(["open", cur])
-                else:
-                    import subprocess
-
-                    subprocess.Popen(["xdg-open", extracted])
-                    subprocess.Popen(["xdg-open", cur])
-            except Exception:
-                pass
-
-        def on_error(msg: str):
-            prog.close()
-            thread.quit()
-            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить: {msg}")
-
-        def on_status(text: str):
+    def _cleanup_update_thread(self, wait: bool = False):
+        thread = self._update_fetch_thread
+        if thread:
             with contextlib.suppress(Exception):
-                prog.setLabelText(text)
-
-        thread.started.connect(worker.run)
-        connection_type = QtCore.Qt.QueuedConnection
-        worker.progress.connect(on_progress, connection_type)
-        worker.finished.connect(on_finished, connection_type)
-        worker.error.connect(on_error, connection_type)
-        worker.status.connect(on_status, connection_type)
-        worker.finished.connect(worker.deleteLater)
-        worker.error.connect(worker.deleteLater)
-        worker.status.connect(lambda *_: None)
-        thread.finished.connect(thread.deleteLater)
-        thread.start()
-
-    def show_manual_update_instructions(self, new_dir: str, current_dir: str) -> None:
-        try:
-            if sys.platform == "darwin":
-                text = (
-                    "Обновление вручную (macOS):\n\n"
-                    "1) Закройте RnSApp, если оно открыто.\n"
-                    "2) В открывшихся окнах найдите:\n"
-                    f"   - Новая версия: {new_dir}\n"
-                    f"   - Текущая версия: {current_dir}\n"
-                    "3) Перетащите 'RnSApp.app' из новой папки в текущую и согласитесь на замену.\n"
-                    "4) Откройте 'RnSApp.app'. Если появится предупреждение, используйте Контекстное меню → Открыть.\n"
-                )
-            elif sys.platform.startswith("win"):
-                text = (
-                    "Обновление вручную (Windows):\n\n"
-                    "1) Убедитесь, что RnSApp закрыто.\n"
-                    "2) В открывшихся окнах найдите:\n"
-                    f"   - Новая версия: {new_dir}\n"
-                    f"   - Текущая версия: {current_dir}\n"
-                    "3) Скопируйте содержимое новой папки 'RnSApp' поверх текущей 'RnSApp' (с заменой файлов)\n"
-                    "   или удалите старую папку и переместите новую на её место.\n"
-                    "4) Запустите 'RnSApp.exe'.\n"
-                )
-            else:
-                text = (
-                    "Обновление вручную: закройте приложение, скопируйте файлы из новой папки в текущую с заменой, затем запустите заново.\n"
-                    f"Новая: {new_dir}\nТекущая: {current_dir}"
-                )
-            QtWidgets.QMessageBox.information(self, "Ручное обновление", text)
-        except Exception:
-            pass
+                thread.requestInterruption()
+                thread.quit()
+                if wait:
+                    thread.wait(3000)
+        self._update_fetch_thread = None
+        self._update_fetch_worker = None
 
     def closeEvent(self, event):
         with contextlib.suppress(Exception):
@@ -599,6 +454,45 @@ class RnSApp(QtWidgets.QMainWindow):
         for window in QApplication.topLevelWidgets():
             window.close()
         super().closeEvent(event)
+
+    def _show_download_link(self, url: str):
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle("Загрузка обновления")
+        dlg.resize(620, 180)
+        layout = QtWidgets.QVBoxLayout(dlg)
+
+        info = QtWidgets.QLabel("Ссылка на релиз. Нажмите, чтобы открыть в браузере, или скопируйте.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        link = QtWidgets.QLabel(f'<a href="{url}">{url}</a>')
+        link.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+        link.setOpenExternalLinks(True)
+        layout.addWidget(link)
+
+        btns = QtWidgets.QHBoxLayout()
+        btn_copy = QtWidgets.QPushButton("Скопировать ссылку")
+        btn_open = QtWidgets.QPushButton("Открыть в браузере")
+        btn_close = QtWidgets.QPushButton("Закрыть")
+        btns.addWidget(btn_copy)
+        btns.addWidget(btn_open)
+        btns.addStretch(1)
+        btns.addWidget(btn_close)
+        layout.addLayout(btns)
+
+        def copy_link():
+            cb = QApplication.clipboard()
+            if cb:
+                cb.setText(url)
+
+        def open_link():
+            QDesktopServices.openUrl(QtCore.QUrl(url))
+
+        btn_copy.clicked.connect(copy_link)
+        btn_open.clicked.connect(open_link)
+        btn_close.clicked.connect(dlg.accept)
+
+        dlg.exec()
 
     def calculate_means(self):
         rns_list = []
