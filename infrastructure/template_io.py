@@ -36,7 +36,7 @@ def _to_float(val):
 
 
 def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict[str, float | None]) -> str:
-    """Create template workbook with headers and optional area columns."""
+    """Create template workbook with headers and optional area/diameter columns."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = _sanitize_sheet_name(sheet_name)
@@ -48,20 +48,25 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
         DataTableColumns.DIAMETER.slug,
     ]
 
-    area_columns: List[Tuple[ParamTableColumns, float | None]] = []
-    area_columns.append((ParamTableColumns.S_CUSTOM1, areas.get("s_custom1")))
-    area_columns.append((ParamTableColumns.S_CUSTOM2, areas.get("s_custom2")))
-    # Only keep areas that were provided (non-None)
-    area_columns = [(p, v) for p, v in area_columns if v is not None]
+    param_columns: List[Tuple[ParamTableColumns, float | None]] = [
+        (ParamTableColumns.S_CUSTOM1, areas.get("s_custom1")),
+        (ParamTableColumns.S_CUSTOM2, areas.get("s_custom2")),
+        (ParamTableColumns.S_CUSTOM3, areas.get("s_custom3")),
+        (ParamTableColumns.D_CUSTOM1, areas.get("d_custom1")),
+        (ParamTableColumns.D_CUSTOM2, areas.get("d_custom2")),
+        (ParamTableColumns.D_CUSTOM3, areas.get("d_custom3")),
+    ]
+    # Only keep params that were provided (non-None)
+    param_columns = [(p, v) for p, v in param_columns if v is not None]
 
-    for col_idx, name in enumerate(headers + [p.name for p, _ in area_columns], start=1):
+    for col_idx, name in enumerate(headers + [p.name for p, _ in param_columns], start=1):
         hcell = ws.cell(row=1, column=col_idx, value=name)
         hcell.font = Font(bold=True)
         hcell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Put area values in row 2 under their headers
-    if area_columns:
-        for offset, (_, value) in enumerate(area_columns, start=len(headers) + 1):
+    # Put parameter values in row 2 under their headers
+    if param_columns:
+        for offset, (_, value) in enumerate(param_columns, start=len(headers) + 1):
             cell = ws.cell(row=2, column=offset, value=value)
             cell.alignment = Alignment(horizontal="center", vertical="center")
             cell.number_format = "0.000"
@@ -84,7 +89,7 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
 
 
 def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float | None], List[str]]:
-    """Read template and return initial_data plus area values."""
+    """Read template and return initial_data plus area/diameter values."""
     errors: List[str] = []
     wb = openpyxl.load_workbook(file_path)
     ws = wb.active
@@ -144,10 +149,24 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
         )
         initial_data.append(InitialDataItem(row=row_idx, col=DataTableColumns.DIAMETER.index, value=diam_val or ""))
 
-    area_values: Dict[str, float | None] = {"s_custom1": None, "s_custom2": None}
-    for param, key in ((ParamTableColumns.S_CUSTOM1, "s_custom1"), (ParamTableColumns.S_CUSTOM2, "s_custom2")):
+    param_values: Dict[str, float | None] = {
+        "s_custom1": None,
+        "s_custom2": None,
+        "s_custom3": None,
+        "d_custom1": None,
+        "d_custom2": None,
+        "d_custom3": None,
+    }
+    for param, key in (
+        (ParamTableColumns.S_CUSTOM1, "s_custom1"),
+        (ParamTableColumns.S_CUSTOM2, "s_custom2"),
+        (ParamTableColumns.S_CUSTOM3, "s_custom3"),
+        (ParamTableColumns.D_CUSTOM1, "d_custom1"),
+        (ParamTableColumns.D_CUSTOM2, "d_custom2"),
+        (ParamTableColumns.D_CUSTOM3, "d_custom3"),
+    ):
         col = col_for(param.name)
         if col:
-            area_values[key] = _to_float(ws.cell(row=2, column=col).value)
+            param_values[key] = _to_float(ws.cell(row=2, column=col).value)
 
-    return initial_data, area_values, errors
+    return initial_data, param_values, errors

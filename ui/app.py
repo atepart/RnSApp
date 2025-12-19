@@ -84,6 +84,32 @@ class RnSApp(QtWidgets.QMainWindow):
         self.allowed_error.setDecimals(2)
         self.allowed_error.setValue(2.5)
 
+        # Площади (S1-S3) и диаметры (D1-D3)
+        self.s_custom1 = QtWidgets.QDoubleSpinBox(self)
+        self.s_custom1.setDecimals(3)
+        self.s_custom1.setRange(0, 100000)
+        self.s_custom1.setValue(1.0)
+        self.s_custom2 = QtWidgets.QDoubleSpinBox(self)
+        self.s_custom2.setDecimals(3)
+        self.s_custom2.setRange(0, 100000)
+        self.s_custom2.setValue(1.0)
+        self.s_custom3 = QtWidgets.QDoubleSpinBox(self)
+        self.s_custom3.setDecimals(3)
+        self.s_custom3.setRange(0, 100000)
+        self.s_custom3.setValue(1.0)
+        self.d_custom1 = QtWidgets.QDoubleSpinBox(self)
+        self.d_custom1.setDecimals(3)
+        self.d_custom1.setRange(0, 100000)
+        self.d_custom1.setValue(0.0)
+        self.d_custom2 = QtWidgets.QDoubleSpinBox(self)
+        self.d_custom2.setDecimals(3)
+        self.d_custom2.setRange(0, 100000)
+        self.d_custom2.setValue(0.0)
+        self.d_custom3 = QtWidgets.QDoubleSpinBox(self)
+        self.d_custom3.setDecimals(3)
+        self.d_custom3.setRange(0, 100000)
+        self.d_custom3.setValue(0.0)
+
         # Контейнер без заголовка; сами ячейки остаются группами
         self.cell_group = QtWidgets.QWidget()
         self.cell_v_layout = QtWidgets.QVBoxLayout()
@@ -137,35 +163,43 @@ class RnSApp(QtWidgets.QMainWindow):
         self.data_dock.setWidget(data_container)
 
         # Объединенные параметры ввода + действия
-        # Inputs for custom nominal areas (um^2)
-        self.s_custom1 = QtWidgets.QDoubleSpinBox(self)
-        self.s_custom1.setDecimals(3)
-        self.s_custom1.setRange(0, 100000)
-        self.s_custom1.setValue(1.0)
-        self.s_custom2 = QtWidgets.QDoubleSpinBox(self)
-        self.s_custom2.setDecimals(3)
-        self.s_custom2.setRange(0, 100000)
-        self.s_custom2.setValue(1.0)
-
         inputs_container = QtWidgets.QWidget(self)
         inputs_layout = QtWidgets.QVBoxLayout()
         inputs_layout.setContentsMargins(6, 6, 6, 6)
         inputs_layout.setSpacing(6)
-        # 2x2 grid of parameters: each field is label + widget
+        # Grid of parameter groups: Rn block plus S/D pairs
         inputs_grid = QtWidgets.QGridLayout()
         inputs_grid.setContentsMargins(0, 0, 0, 0)
         inputs_grid.setHorizontalSpacing(12)
         inputs_grid.setVerticalSpacing(6)
-        # Row 0
-        inputs_grid.addWidget(QtWidgets.QLabel("Последовательное Rn (Ω):"), 0, 0)
-        inputs_grid.addWidget(self.rn_consistent, 0, 1)
-        inputs_grid.addWidget(QtWidgets.QLabel("Допустимое отклонение (%):"), 0, 2)
-        inputs_grid.addWidget(self.allowed_error, 0, 3)
-        # Row 1
-        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S2 (μm²):"), 1, 0)
-        inputs_grid.addWidget(self.s_custom1, 1, 1)
-        inputs_grid.addWidget(QtWidgets.QLabel("Заданная площадь S3 (μm²):"), 1, 2)
-        inputs_grid.addWidget(self.s_custom2, 1, 3)
+
+        def _make_group(label_text_top: str, widget_top: QtWidgets.QWidget, label_text_bottom: str, widget_bottom):
+            vbox = QtWidgets.QVBoxLayout()
+            vbox.setSpacing(4)
+            vbox.addWidget(QtWidgets.QLabel(label_text_top))
+            vbox.addWidget(widget_top)
+            vbox.addWidget(QtWidgets.QLabel(label_text_bottom))
+            vbox.addWidget(widget_bottom)
+            return vbox
+
+        rn_group = _make_group(
+            "Последовательное Rn (Ω):", self.rn_consistent, "Допустимое отклонение (%):", self.allowed_error
+        )
+        s1_group = _make_group(
+            "Заданная площадь S1 (μm²):", self.s_custom1, "Заданный диаметр D1 (μm):", self.d_custom1
+        )
+        s2_group = _make_group(
+            "Заданная площадь S2 (μm²):", self.s_custom2, "Заданный диаметр D2 (μm):", self.d_custom2
+        )
+        s3_group = _make_group(
+            "Заданная площадь S3 (μm²):", self.s_custom3, "Заданный диаметр D3 (μm):", self.d_custom3
+        )
+
+        inputs_grid.addLayout(rn_group, 0, 0)
+        inputs_grid.addLayout(s1_group, 0, 1)
+        inputs_grid.addLayout(s2_group, 0, 2)
+        inputs_grid.addLayout(s3_group, 0, 3)
+
         inputs_layout.addLayout(inputs_grid)
         inputs_layout.addStretch(1)
         inputs_layout.addWidget(self.actions_group)
@@ -247,6 +281,7 @@ class RnSApp(QtWidgets.QMainWindow):
             allowed_error_widget=self.allowed_error,
             s_custom1_widget=self.s_custom1,
             s_custom2_widget=self.s_custom2,
+            s_custom3_widget=self.s_custom3,
         )
         self.plot_service = PlotService(self.plot, self.data_table, self.param_table)
         self.plot_service.prepare_plot()
@@ -553,9 +588,13 @@ class RnSApp(QtWidgets.QMainWindow):
             allowed_error=self.allowed_error.value(),
             s_custom1=self.s_custom1.value(),
             s_custom2=self.s_custom2.value(),
-            s_real_1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_1),
+            s_custom3=self.s_custom3.value(),
+            d_custom1=self.d_custom1.value(),
+            d_custom2=self.d_custom2.value(),
+            d_custom3=self.d_custom3.value(),
             s_real_custom1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM1),
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
+            s_real_custom3=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM3),
         )
         self.set_active_cell(cell)
         # After saving, clear dirty indicator for this cell
@@ -586,6 +625,18 @@ class RnSApp(QtWidgets.QMainWindow):
         if not item:
             return
         snap = self._param_table_snapshot()
+        snap.update(
+            {
+                ParamTableColumns.RN_CONSISTENT.slug: self.rn_consistent.value(),
+                ParamTableColumns.ALLOWED_ERROR.slug: self.allowed_error.value(),
+                ParamTableColumns.S_CUSTOM1.slug: self.s_custom1.value(),
+                ParamTableColumns.S_CUSTOM2.slug: self.s_custom2.value(),
+                ParamTableColumns.S_CUSTOM3.slug: self.s_custom3.value(),
+                ParamTableColumns.D_CUSTOM1.slug: self.d_custom1.value(),
+                ParamTableColumns.D_CUSTOM2.slug: self.d_custom2.value(),
+                ParamTableColumns.D_CUSTOM3.slug: self.d_custom3.value(),
+            }
+        )
         compare_cols = [
             ParamTableColumns.SLOPE,
             ParamTableColumns.INTERCEPT,
@@ -595,13 +646,16 @@ class RnSApp(QtWidgets.QMainWindow):
             ParamTableColumns.RNS_ERROR,
             ParamTableColumns.RN_CONSISTENT,
             ParamTableColumns.ALLOWED_ERROR,
-            ParamTableColumns.S_REAL_1,
             ParamTableColumns.S_REAL_CUSTOM1,
             ParamTableColumns.S_REAL_CUSTOM2,
+            ParamTableColumns.S_REAL_CUSTOM3,
+            ParamTableColumns.S_CUSTOM1,
+            ParamTableColumns.S_CUSTOM2,
+            ParamTableColumns.S_CUSTOM3,
+            ParamTableColumns.D_CUSTOM1,
+            ParamTableColumns.D_CUSTOM2,
+            ParamTableColumns.D_CUSTOM3,
         ]
-        # Include custom area inputs if available
-        with contextlib.suppress(Exception):
-            compare_cols.extend([ParamTableColumns.S_CUSTOM1, ParamTableColumns.S_CUSTOM2])
         is_dirty = False
         for col in compare_cols:
             saved_val = getattr(item, col.slug, None)
@@ -714,6 +768,10 @@ class RnSApp(QtWidgets.QMainWindow):
         areas = {
             "s_custom1": float(self.s_custom1.value()) if self.s_custom1 is not None else None,
             "s_custom2": float(self.s_custom2.value()) if self.s_custom2 is not None else None,
+            "s_custom3": float(self.s_custom3.value()) if self.s_custom3 is not None else None,
+            "d_custom1": float(self.d_custom1.value()) if self.d_custom1 is not None else None,
+            "d_custom2": float(self.d_custom2.value()) if self.d_custom2 is not None else None,
+            "d_custom3": float(self.d_custom3.value()) if self.d_custom3 is not None else None,
         }
 
         try:
@@ -754,6 +812,14 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.s_custom1.setValue(float(areas["s_custom1"]))
             if areas.get("s_custom2") is not None:
                 self.s_custom2.setValue(float(areas["s_custom2"]))
+            if areas.get("s_custom3") is not None:
+                self.s_custom3.setValue(float(areas["s_custom3"]))
+            if areas.get("d_custom1") is not None:
+                self.d_custom1.setValue(float(areas["d_custom1"]))
+            if areas.get("d_custom2") is not None:
+                self.d_custom2.setValue(float(areas["d_custom2"]))
+            if areas.get("d_custom3") is not None:
+                self.d_custom3.setValue(float(areas["d_custom3"]))
 
         if errors:
             QtWidgets.QMessageBox.warning(self, "Шаблон загружен с предупреждениями", "\n".join(errors))
@@ -777,6 +843,18 @@ class RnSApp(QtWidgets.QMainWindow):
         with contextlib.suppress(Exception):
             if getattr(cell_data, "s_custom2", None) not in (None, ""):
                 self.s_custom2.setValue(float(cell_data.s_custom2))
+        with contextlib.suppress(Exception):
+            if getattr(cell_data, "s_custom3", None) not in (None, ""):
+                self.s_custom3.setValue(float(cell_data.s_custom3))
+        with contextlib.suppress(Exception):
+            if getattr(cell_data, "d_custom1", None) not in (None, ""):
+                self.d_custom1.setValue(float(cell_data.d_custom1))
+        with contextlib.suppress(Exception):
+            if getattr(cell_data, "d_custom2", None) not in (None, ""):
+                self.d_custom2.setValue(float(cell_data.d_custom2))
+        with contextlib.suppress(Exception):
+            if getattr(cell_data, "d_custom3", None) not in (None, ""):
+                self.d_custom3.setValue(float(cell_data.d_custom3))
         # Clear dirty flag on load
         with contextlib.suppress(Exception):
             self.cell_widgets[cell - 1].set_dirty(False)

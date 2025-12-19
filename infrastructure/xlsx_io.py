@@ -286,6 +286,7 @@ class XlsxCellIO(CellDataIO):
             rn_const_ref = result_ref(ParamTableColumns.RN_CONSISTENT)
             s_custom1_ref = result_ref(ParamTableColumns.S_CUSTOM1)
             s_custom2_ref = result_ref(ParamTableColumns.S_CUSTOM2)
+            s_custom3_ref = result_ref(ParamTableColumns.S_CUSTOM3)
 
             rn_sqrt_range = (
                 f"{data_col_letter[DataTableColumns.RN_SQRT]}2:{data_col_letter[DataTableColumns.RN_SQRT]}{data_max_row}"
@@ -331,10 +332,6 @@ class XlsxCellIO(CellDataIO):
                 rns_error_cell.value = f'=IF(COUNT({rns_range})=0,"",IFERROR(STDEV.P({rns_range}),""))'
                 rns_error_cell.number_format = "0.000"
 
-            s_real1_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_1])
-            s_real1_cell.value = f'=IF(ISBLANK({drift_ref}),"",IFERROR(PI()*(SQRT(4*1/PI())-{drift_ref})^2/4,""))'
-            s_real1_cell.number_format = "0.000"
-
             s_real_c1_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM1])
             s_real_c1_cell.value = (
                 f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom1_ref})),"",'
@@ -348,6 +345,13 @@ class XlsxCellIO(CellDataIO):
                 f'IFERROR(PI()*(SQRT(4*{s_custom2_ref}/PI())-{drift_ref})^2/4,""))'
             )
             s_real_c2_cell.number_format = "0.000"
+
+            s_real_c3_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM3])
+            s_real_c3_cell.value = (
+                f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom3_ref})),"",'
+                f'IFERROR(PI()*(SQRT(4*{s_custom3_ref}/PI())-{drift_ref})^2/4,""))'
+            )
+            s_real_c3_cell.number_format = "0.000"
 
             # Per-row formulas for derived values (Rn^-0.5, RnS, площадь, ошибка RnS)
             for r in range(2, data_max_row + 1):
@@ -577,6 +581,18 @@ class XlsxCellIO(CellDataIO):
                 pos = header_positions.get(name)
                 return pos[-1] if pos else None
 
+            header_aliases: Dict[ParamTableColumns, List[str]] = {
+                ParamTableColumns.S_REAL_CUSTOM1: ["S_1.00 (μm²)"],
+            }
+
+            def last_col_for_param(param: ParamTableColumns) -> int | None:
+                names = [param.name] + header_aliases.get(param, [])
+                for nm in names:
+                    col = last_col_for(nm)
+                    if col:
+                        return col
+                return None
+
             def read_cell(row: int, col: int | None) -> Any:
                 return ws.cell(row=row, column=col).value if col is not None else None
 
@@ -625,13 +641,17 @@ class XlsxCellIO(CellDataIO):
 
             # Input parameters stored in the results table (row 2)
             def read_param(param: ParamTableColumns, default=None):
-                col = last_col_for(param.name)
+                col = last_col_for_param(param)
                 return to_float(read_cell(2, col), default)
 
             rn_consistent = read_param(ParamTableColumns.RN_CONSISTENT, default=0.0)
             allowed_error = read_param(ParamTableColumns.ALLOWED_ERROR, default=2.5)
             s_custom1 = read_param(ParamTableColumns.S_CUSTOM1, default=1.0)
             s_custom2 = read_param(ParamTableColumns.S_CUSTOM2, default=1.0)
+            s_custom3 = read_param(ParamTableColumns.S_CUSTOM3, default=1.0)
+            d_custom1 = read_param(ParamTableColumns.D_CUSTOM1, default=0.0)
+            d_custom2 = read_param(ParamTableColumns.D_CUSTOM2, default=0.0)
+            d_custom3 = read_param(ParamTableColumns.D_CUSTOM3, default=0.0)
 
             rows_data: List[Dict[str, Any]] = []
             for row in range(2, max_data_row + 1):
@@ -733,9 +753,9 @@ class XlsxCellIO(CellDataIO):
                     return calculate_real_area(area_nominal=float(area_nominal), drift=float(drift))
                 return 0.0
 
-            s_real_1 = calc_area(1.0)
             s_real_c1 = calc_area(s_custom1)
             s_real_c2 = calc_area(s_custom2)
+            s_real_c3 = calc_area(s_custom3)
 
             initial_data = InitialDataItemList()
 
@@ -777,9 +797,13 @@ class XlsxCellIO(CellDataIO):
                     "allowed_error": allowed_error if allowed_error is not None else 0.0,
                     "s_custom1": s_custom1 if s_custom1 is not None else 0.0,
                     "s_custom2": s_custom2 if s_custom2 is not None else 0.0,
-                    "s_real_1": s_real_1,
+                    "s_custom3": s_custom3 if s_custom3 is not None else 0.0,
+                    "d_custom1": d_custom1 if d_custom1 is not None else 0.0,
+                    "d_custom2": d_custom2 if d_custom2 is not None else 0.0,
+                    "d_custom3": d_custom3 if d_custom3 is not None else 0.0,
                     "s_real_custom1": s_real_c1,
                     "s_real_custom2": s_real_c2,
+                    "s_real_custom3": s_real_c3,
                 }
             )
 

@@ -113,23 +113,36 @@ def load_cells_from_xlsx(file_name: str):
 
         result_column_names = [ws_result[1][col].value for col in range(0, ws_result.max_column)]
         result_kwargs = {}
-        for result_column in ParamTableColumns:
-            try:
-                col = result_column_names.index(result_column.name)
-            except (ValueError,):
-                col = None
-                # Optional new columns may be absent in older files
-                if col is None:
-                    if result_column.slug in (
-                        ParamTableColumns.S_REAL_1.slug,
-                        ParamTableColumns.S_REAL_CUSTOM1.slug,
-                        ParamTableColumns.S_REAL_CUSTOM2.slug,
-                        ParamTableColumns.S_CUSTOM1.slug,
-                        ParamTableColumns.S_CUSTOM2.slug,
-                    ):
-                        continue
-                    errors.append(f"Колонка '{result_column.name}' не найдена в таблице '{result_name}'")
+        header_aliases = {ParamTableColumns.S_REAL_CUSTOM1: ["S_1.00 (μm²)"]}
+        optional_slugs = {
+            ParamTableColumns.S_REAL_CUSTOM1.slug,
+            ParamTableColumns.S_REAL_CUSTOM2.slug,
+            ParamTableColumns.S_REAL_CUSTOM3.slug,
+            ParamTableColumns.S_CUSTOM1.slug,
+            ParamTableColumns.S_CUSTOM2.slug,
+            ParamTableColumns.S_CUSTOM3.slug,
+            ParamTableColumns.D_CUSTOM1.slug,
+            ParamTableColumns.D_CUSTOM2.slug,
+            ParamTableColumns.D_CUSTOM3.slug,
+        }
+
+        def find_column(param: ParamTableColumns) -> int | None:
+            names = [param.name] + header_aliases.get(param, [])
+            for nm in names:
+                try:
+                    return result_column_names.index(nm)
+                except (ValueError,):
                     continue
+            return None
+
+        for result_column in ParamTableColumns:
+            col = find_column(result_column)
+            if col is None:
+                # Optional new columns may be absent in older files
+                if result_column.slug in optional_slugs:
+                    continue
+                errors.append(f"Колонка '{result_column.name}' не найдена в таблице '{result_name}'")
+                continue
             row = 2
             try:
                 value = ws_result[row][col].value if col is not None and ws_result[row][col].value else 0

@@ -26,6 +26,7 @@ class CalculationService:
         allowed_error_widget,
         s_custom1_widget=None,
         s_custom2_widget=None,
+        s_custom3_widget=None,
     ) -> None:
         self.data_table = data_table
         self.param_table = param_table
@@ -33,6 +34,7 @@ class CalculationService:
         self.allowed_error_widget = allowed_error_widget
         self.s_custom1_widget = s_custom1_widget
         self.s_custom2_widget = s_custom2_widget
+        self.s_custom3_widget = s_custom3_widget
 
     def calculate_results(self):
         self.data_table.clear_calculations()
@@ -79,12 +81,27 @@ class CalculationService:
         rns = calculate_rns(slope)
         self.param_table.setItem(0, ParamTableColumns.RNS.index, TableWidgetItem(str(rns)))
 
-        # Real areas: for nominal 1 um^2 and custom S1, S2 if provided
+        # Persist the user-entered nominal areas in hidden columns
         try:
-            s_real_1 = calculate_real_area(area_nominal=1.0, drift=drift)
-            self.param_table.setItem(0, ParamTableColumns.S_REAL_1.index, TableWidgetItem(str(s_real_1)))
+            if self.s_custom1_widget is not None:
+                s_nom1 = float(self.s_custom1_widget.value())
+                self.param_table.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(s_nom1)))
         except Exception:
             pass
+        try:
+            if self.s_custom2_widget is not None:
+                s_nom2 = float(self.s_custom2_widget.value())
+                self.param_table.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(s_nom2)))
+        except Exception:
+            pass
+        try:
+            if self.s_custom3_widget is not None:
+                s_nom3 = float(self.s_custom3_widget.value())
+                self.param_table.setItem(0, ParamTableColumns.S_CUSTOM3.index, TableWidgetItem(str(s_nom3)))
+        except Exception:
+            pass
+
+        # Real areas for nominal S1..S3 if provided
         try:
             if self.s_custom1_widget is not None:
                 s_nom1 = float(self.s_custom1_widget.value())
@@ -97,6 +114,13 @@ class CalculationService:
                 s_nom2 = float(self.s_custom2_widget.value())
                 s_real_c2 = calculate_real_area(area_nominal=s_nom2, drift=drift)
                 self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM2.index, TableWidgetItem(str(s_real_c2)))
+        except Exception:
+            pass
+        try:
+            if self.s_custom3_widget is not None:
+                s_nom3 = float(self.s_custom3_widget.value())
+                s_real_c3 = calculate_real_area(area_nominal=s_nom3, drift=drift)
+                self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM3.index, TableWidgetItem(str(s_real_c3)))
         except Exception:
             pass
         return True

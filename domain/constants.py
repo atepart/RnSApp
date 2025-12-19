@@ -69,11 +69,15 @@ class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
     RNS_ERROR = ("Ошибка RnS", float, "rns_error")
     RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
     ALLOWED_ERROR = ("Допустимое отклонение (%)", float, "allowed_error")
-    S_CUSTOM1 = ("Заданная площадь S2 (μm²)", float, "s_custom1")
-    S_CUSTOM2 = ("Заданная площадь S3 (μm²)", float, "s_custom2")
-    S_REAL_1 = ("S_1.00 (μm²)", float, "s_real_1")
-    S_REAL_CUSTOM1 = ("S-2 (μm²)", float, "s_real_custom1")
-    S_REAL_CUSTOM2 = ("S-3 (μm²)", float, "s_real_custom2")
+    S_CUSTOM1 = ("Заданная площадь S1 (μm²)", float, "s_custom1")
+    S_CUSTOM2 = ("Заданная площадь S2 (μm²)", float, "s_custom2")
+    S_CUSTOM3 = ("Заданная площадь S3 (μm²)", float, "s_custom3")
+    D_CUSTOM1 = ("Заданный диаметр D1 (μm)", float, "d_custom1")
+    D_CUSTOM2 = ("Заданный диаметр D2 (μm)", float, "d_custom2")
+    D_CUSTOM3 = ("Заданный диаметр D3 (μm)", float, "d_custom3")
+    S_REAL_CUSTOM1 = ("S-1 (μm²)", float, "s_real_custom1")
+    S_REAL_CUSTOM2 = ("S-2 (μm²)", float, "s_real_custom2")
+    S_REAL_CUSTOM3 = ("S-3 (μm²)", float, "s_real_custom3")
 
 
 PLOT_COLORS = [

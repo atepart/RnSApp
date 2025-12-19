@@ -41,9 +41,12 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
                 ParamTableColumns.DRIFT.index,
                 ParamTableColumns.RNS_ERROR.index,
                 ParamTableColumns.DRIFT_ERROR.index,
-                ParamTableColumns.S_REAL_1.index,
                 ParamTableColumns.S_REAL_CUSTOM1.index,
                 ParamTableColumns.S_REAL_CUSTOM2.index,
+                ParamTableColumns.S_REAL_CUSTOM3.index,
+                ParamTableColumns.D_CUSTOM1.index,
+                ParamTableColumns.D_CUSTOM2.index,
+                ParamTableColumns.D_CUSTOM3.index,
             ]
         )
 
@@ -53,9 +56,12 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.RNS.index, RoundedDelegate(rounded=1, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
-        self.setItemDelegateForColumn(ParamTableColumns.S_REAL_1.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM1.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM2.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM3.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.D_CUSTOM1.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.D_CUSTOM2.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.D_CUSTOM3.index, RoundedDelegate(rounded=3, parent=self))
 
         self.setColumnHidden(ParamTableColumns.DRIFT_ERROR.index, True)
         self.setColumnHidden(ParamTableColumns.SLOPE.index, True)
@@ -64,6 +70,10 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(ParamTableColumns.ALLOWED_ERROR.index, True)
         self.setColumnHidden(ParamTableColumns.S_CUSTOM1.index, True)
         self.setColumnHidden(ParamTableColumns.S_CUSTOM2.index, True)
+        self.setColumnHidden(ParamTableColumns.S_CUSTOM3.index, True)
+        self.setColumnHidden(ParamTableColumns.D_CUSTOM1.index, True)
+        self.setColumnHidden(ParamTableColumns.D_CUSTOM2.index, True)
+        self.setColumnHidden(ParamTableColumns.D_CUSTOM3.index, True)
 
         self.clear_all()
 
@@ -85,9 +95,10 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItem(0, ParamTableColumns.ALLOWED_ERROR.index, TableWidgetItem(str(data.allowed_error)))
         self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(data.s_custom1)))
         self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
-
-        with contextlib.suppress(Exception):
-            self.setItem(0, ParamTableColumns.S_REAL_1.index, TableWidgetItem(str(data.s_real_1)))
+        self.setItem(0, ParamTableColumns.S_CUSTOM3.index, TableWidgetItem(str(data.s_custom3)))
+        self.setItem(0, ParamTableColumns.D_CUSTOM1.index, TableWidgetItem(str(data.d_custom1)))
+        self.setItem(0, ParamTableColumns.D_CUSTOM2.index, TableWidgetItem(str(data.d_custom2)))
+        self.setItem(0, ParamTableColumns.D_CUSTOM3.index, TableWidgetItem(str(data.d_custom3)))
 
         with contextlib.suppress(Exception):
             self.setItem(
@@ -104,10 +115,11 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
             )
 
         with contextlib.suppress(Exception):
-            self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(data.s_custom1)))
-
-        with contextlib.suppress(Exception):
-            self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
+            self.setItem(
+                0,
+                ParamTableColumns.S_REAL_CUSTOM3.index,
+                TableWidgetItem(str(data.s_real_custom3)),
+            )
 
     def is_empty(self):
         # Consider the table non-empty if key computed fields are present.
