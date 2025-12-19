@@ -328,8 +328,19 @@ class XlsxCellIO(CellDataIO):
                 rns_range = (
                     f"{data_col_letter[DataTableColumns.RNS]}2:{data_col_letter[DataTableColumns.RNS]}{data_max_row}"
                 )
+                select_range = None
+                if select_col_idx:
+                    select_range = f"{data_col_letter[DataTableColumns.SELECT]}2:{data_col_letter[DataTableColumns.SELECT]}{data_max_row}"
                 rns_error_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.RNS_ERROR])
-                rns_error_cell.value = f'=IF(COUNT({rns_range})=0,"",IFERROR(STDEV.P({rns_range}),""))'
+                if select_range:
+                    cond = f"(({select_range}=TRUE)*({rns_range}<>0))"
+                else:
+                    cond = f"({rns_range}<>0)"
+                cnt = f"SUMPRODUCT({cond})"
+                mean = f"SUMPRODUCT({cond}*{rns_range})/{cnt}"
+                variance_sum = f"SUMPRODUCT({cond}*({rns_range}-{mean})^2)"
+                std_expr = f"SQRT({variance_sum}/{cnt})"
+                rns_error_cell.value = f'=IF({cnt}=0,"",IFERROR({std_expr},""))'
                 rns_error_cell.number_format = "0.000"
 
             s_real_c1_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM1])
