@@ -428,7 +428,7 @@ class RnSApp(QtWidgets.QMainWindow):
             spinner.close()
 
         # Show picker dialog on main thread
-        dlg = ReleasePickerDialog(releases, parent=self)
+        dlg = ReleasePickerDialog(releases, parent=self, current_version=__version__)
         if dlg.exec() != QtWidgets.QDialog.Accepted or not dlg.selected:
             return
         selected = dlg.selected

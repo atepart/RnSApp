@@ -32,15 +32,21 @@ class FetchReleasesWorker(QtCore.QObject):
 
 
 class ReleasePickerDialog(QtWidgets.QDialog):
-    def __init__(self, releases: list, parent=None) -> None:
+    def __init__(self, releases: list, parent=None, current_version: str | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Выбор версии для установки")
         self.resize(560, 380)
         self._releases = releases
+        self._current_version = current_version
         self.selected = None
 
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
+
+        if current_version:
+            cv_label = QtWidgets.QLabel(f"Текущая версия: {current_version}")
+            cv_label.setStyleSheet("font-weight: bold; color: #d35400;")
+            layout.addWidget(cv_label)
 
         self.listw = QtWidgets.QListWidget()
         self.listw.itemDoubleClicked.connect(self._on_accept)
@@ -62,20 +68,30 @@ class ReleasePickerDialog(QtWidgets.QDialog):
 
     def _populate(self):
         self.listw.clear()
+        current_row = 0
         for r in self._releases:
             text = r.tag
             if getattr(r, "published_at", None):
                 text += f"  —  {r.published_at}"
             if getattr(r, "prerelease", False):
                 text += "  [pre-release]"
+            is_current = self._is_current(r.tag)
+            if is_current:
+                text += "  —  установлена"
             item = QtWidgets.QListWidgetItem(text)
             if not getattr(r, "asset", None) or not getattr(r.asset, "download_url", ""):
                 item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEnabled)
+            if is_current:
+                item.setBackground(QtCore.Qt.GlobalColor.yellow)
+                item.setForeground(QtCore.Qt.GlobalColor.black)
+                item.setFont(self._bold_font(item.font()))
             item.setData(QtCore.Qt.UserRole, r)
             self.listw.addItem(item)
+            if is_current:
+                current_row = self.listw.count() - 1
 
         if self.listw.count() > 0:
-            self.listw.setCurrentRow(0)
+            self.listw.setCurrentRow(current_row)
 
     def _on_accept(self):
         item = self.listw.currentItem()
@@ -83,3 +99,17 @@ class ReleasePickerDialog(QtWidgets.QDialog):
             return
         self.selected = item.data(QtCore.Qt.UserRole)
         self.accept()
+
+    def _is_current(self, tag: str) -> bool:
+        if not self._current_version:
+            return False
+
+        def _norm(v: str) -> str:
+            return v.lower().lstrip("v").strip()
+
+        return _norm(tag) == _norm(self._current_version)
+
+    @staticmethod
+    def _bold_font(font):
+        font.setBold(True)
+        return font
