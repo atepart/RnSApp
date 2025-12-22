@@ -128,23 +128,38 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
 
     def set_default_checks(self):
         for i in range(self.rowCount()):
-            checkbox = QtWidgets.QCheckBox()
+            self._ensure_checkbox(i, checked=False)
+
+    def _ensure_checkbox(self, row: int, checked: bool | None = None) -> QtWidgets.QCheckBox | None:
+        if not (0 <= row < self.rowCount()):
+            return None
+        w = self.cellWidget(row, DataTableColumns.SELECT.index)
+        cb = None
+        if isinstance(w, QtWidgets.QCheckBox):
+            cb = w
+        elif isinstance(w, QtWidgets.QWidget):
+            cbs = w.findChildren(QtWidgets.QCheckBox)
+            cb = cbs[0] if cbs else None
+
+        if cb is None:
+            cb = QtWidgets.QCheckBox()
             container = QtWidgets.QWidget()
             lay = QtWidgets.QHBoxLayout(container)
             lay.setContentsMargins(0, 0, 0, 0)
             lay.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            lay.addWidget(checkbox)
-            self.setCellWidget(i, DataTableColumns.SELECT.index, container)
-            self.setItem(i, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
+            lay.addWidget(cb)
+            self.setCellWidget(row, DataTableColumns.SELECT.index, container)
+
+        if self.item(row, DataTableColumns.SELECT.index) is None:
+            # Keep an item so the cell stays selectable
+            self.setItem(row, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
+
+        if checked is not None and cb is not None:
+            cb.setChecked(checked)
+        return cb
 
     def get_row_checkbox(self, row: int) -> QtWidgets.QCheckBox | None:
-        w = self.cellWidget(row, DataTableColumns.SELECT.index)
-        if isinstance(w, QtWidgets.QCheckBox):
-            return w
-        if isinstance(w, QtWidgets.QWidget):
-            cbs = w.findChildren(QtWidgets.QCheckBox)
-            return cbs[0] if cbs else None
-        return None
+        return self._ensure_checkbox(row)
 
     def uncheck_rows_with_empty_rn(self):
         """Uncheck selection for rows where Rn (Ω) is empty."""
@@ -166,15 +181,25 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         elif event.key() in (QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace):
             self.end_editing()
             selected_items = self.selectedItems()
+            protected_rows = {}
+            for idx in self.selectedIndexes():
+                if idx.column() == DataTableColumns.SELECT.index:
+                    cb = self.get_row_checkbox(idx.row())
+                    protected_rows[idx.row()] = bool(cb.isChecked()) if cb else False
             if selected_items:
                 for item in selected_items:
                     if item.column() not in [
+                        DataTableColumns.SELECT.index,
                         DataTableColumns.RNS.index,
                         DataTableColumns.RN_SQRT.index,
                         DataTableColumns.DRIFT.index,
                         DataTableColumns.SQUARE.index,
                     ]:
                         self.setItem(item.row(), item.column(), TableWidgetItem(""))
+            for row, checked in protected_rows.items():
+                self._ensure_checkbox(row, checked=checked)
+            event.accept()
+            return
         elif event.matches(QtGui.QKeySequence.StandardKey.Paste):
             self.paste_data()
         elif event.matches(QtGui.QKeySequence.StandardKey.Copy):
@@ -268,13 +293,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.RESISTANCE.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.NUMBER.index, TableWidgetItem(str(row + 1)))
-            checkbox = QtWidgets.QCheckBox()
-            container = QtWidgets.QWidget()
-            lay = QtWidgets.QHBoxLayout(container)
-            lay.setContentsMargins(0, 0, 0, 0)
-            lay.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            lay.addWidget(checkbox)
-            self.setCellWidget(row, DataTableColumns.SELECT.index, container)
+            self._ensure_checkbox(row, checked=False)
             self.setItem(row, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
             self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))
         self.header.checkbox.setChecked(True)
@@ -338,14 +357,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.itemChanged.disconnect()
         for item in data:
             if item["col"] == DataTableColumns.SELECT.index:
-                checkbox = QtWidgets.QCheckBox()
-                checkbox.setChecked(item["value"] == "True")
-                container = QtWidgets.QWidget()
-                lay = QtWidgets.QHBoxLayout(container)
-                lay.setContentsMargins(0, 0, 0, 0)
-                lay.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-                lay.addWidget(checkbox)
-                self.setCellWidget(item["row"], DataTableColumns.SELECT.index, container)
+                self._ensure_checkbox(item["row"], checked=item["value"] == "True")
             else:
                 v = item["value"]
                 text = "" if v in (None, "None", "") else f"{v}"
