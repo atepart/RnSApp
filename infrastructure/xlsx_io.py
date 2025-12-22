@@ -171,6 +171,20 @@ class XlsxCellIO(CellDataIO):
                 return val
             return val
 
+        def _is_true(val) -> bool:
+            return val in (True, "TRUE", "True", "true", 1, "1")
+
+        def _nonzero_number(val):
+            try:
+                if val in (None, ""):
+                    return None
+                num = float(val)
+                if num == 0:
+                    return None
+                return num
+            except Exception:
+                return None
+
         # Create one sheet per recorded cell with data table on the left and results on the right
         for cell_data in repo:
             sheet_name = _compose_cell_sheet_title(cell_data.cell, cell_data.name, wb.sheetnames)
@@ -257,16 +271,6 @@ class XlsxCellIO(CellDataIO):
                 letter = result_col_letter[param]
                 return f"${letter}${row}" if absolute else f"{letter}{row}"
 
-            def _last_non_empty(col_idx: int | None) -> int:
-                if col_idx is None:
-                    return 1
-                last = 1
-                for r in range(2, ws.max_row + 1):
-                    v = ws.cell(row=r, column=col_idx).value
-                    if v not in (None, ""):
-                        last = r
-                return last
-
             diameter_col_idx = data_col_idx.get(DataTableColumns.DIAMETER)
             resistance_col_idx = data_col_idx.get(DataTableColumns.RESISTANCE)
             select_col_idx = data_col_idx.get(DataTableColumns.SELECT)
@@ -275,7 +279,21 @@ class XlsxCellIO(CellDataIO):
             rns_error_col_idx = data_col_idx.get(DataTableColumns.RNS_ERROR)
             square_col_idx = data_col_idx.get(DataTableColumns.SQUARE)
 
-            data_max_row = max(_last_non_empty(diameter_col_idx), _last_non_empty(resistance_col_idx))
+            def _row_has_selected_data(row: int) -> bool:
+                if diameter_col_idx is None or resistance_col_idx is None:
+                    return False
+                if select_col_idx:
+                    sel_val = ws.cell(row=row, column=select_col_idx).value
+                    if not _is_true(sel_val):
+                        return False
+                diam_val = _nonzero_number(ws.cell(row=row, column=diameter_col_idx).value)
+                res_val = _nonzero_number(ws.cell(row=row, column=resistance_col_idx).value)
+                return diam_val is not None and res_val is not None
+
+            data_max_row = 1
+            for r in range(2, max_row_index + 2):
+                if _row_has_selected_data(r):
+                    data_max_row = max(data_max_row, r)
             if data_max_row < 2:
                 data_max_row = 2
 
@@ -333,9 +351,9 @@ class XlsxCellIO(CellDataIO):
                     select_range = f"{data_col_letter[DataTableColumns.SELECT]}2:{data_col_letter[DataTableColumns.SELECT]}{data_max_row}"
                 rns_error_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.RNS_ERROR])
                 if select_range:
-                    cond = f"(({select_range}=TRUE)*({rns_range}<>0))"
+                    cond = f"(({select_range}=TRUE)*ISNUMBER({rns_range})*({rns_range}<>0))"
                 else:
-                    cond = f"({rns_range}<>0)"
+                    cond = f"(ISNUMBER({rns_range})*({rns_range}<>0))"
                 cnt = f"SUMPRODUCT({cond})"
                 mean = f"SUMPRODUCT({cond}*{rns_range})/{cnt}"
                 variance_sum = f"SUMPRODUCT({cond}*({rns_range}-{mean})^2)"
@@ -366,11 +384,10 @@ class XlsxCellIO(CellDataIO):
 
             # Per-row formulas for derived values (Rn^-0.5, RnS, площадь, ошибка RnS)
             for r in range(2, data_max_row + 1):
-                diam_v = ws.cell(row=r, column=diameter_col_idx).value if diameter_col_idx else None
-                res_v = ws.cell(row=r, column=resistance_col_idx).value if resistance_col_idx else None
-                if diam_v in (None, "") and res_v in (None, ""):
+                if not _row_has_selected_data(r):
                     continue
-
+                ws.cell(row=r, column=diameter_col_idx).value if diameter_col_idx else None
+                ws.cell(row=r, column=resistance_col_idx).value if resistance_col_idx else None
                 select_ref = None
                 if select_col_idx:
                     select_ref = f"${get_column_letter(select_col_idx)}{r}"
@@ -435,13 +452,13 @@ class XlsxCellIO(CellDataIO):
                 # Determine data max row based on last non-empty in x/y columns
                 def last_non_empty_row_for_col(col_idx: int) -> int:
                     last = 1
-                    for r in range(2, ws.max_row + 1):
+                    for r in range(2, data_max_row + 1):
                         v = ws.cell(row=r, column=col_idx).value
                         if v not in (None, ""):
                             last = r
                     return last
 
-                max_row = max(last_non_empty_row_for_col(x_col_idx), last_non_empty_row_for_col(y_col_idx))
+                max_row = last_non_empty_row_for_col(y_col_idx)
                 if max_row < 2:
                     max_row = 2
 
