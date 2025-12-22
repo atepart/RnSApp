@@ -10,6 +10,7 @@ from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.trendline import Trendline
 from openpyxl.drawing.line import LineProperties
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.styles import Alignment, Border, Font, Side
 from openpyxl.utils import get_column_letter
 
@@ -552,10 +553,13 @@ class XlsxCellIO(CellDataIO):
                         except Exception:
                             pass
 
-                # Place chart under the results table
+                # Place chart under the results table and stretch to Q21
                 chart_anchor_row = 4
                 chart_anchor_col = results_start_col
-                ws.add_chart(chart, ws.cell(row=chart_anchor_row, column=chart_anchor_col).coordinate)
+                start_marker = AnchorMarker(col=chart_anchor_col - 1, colOff=0, row=chart_anchor_row - 1, rowOff=0)
+                end_marker = AnchorMarker(col=18 - 1, row=23 - 1, colOff=0, rowOff=0)  # bottom-right at Q21
+                chart.anchor = TwoCellAnchor(_from=start_marker, to=end_marker, editAs="twoCell")
+                ws.add_chart(chart)
             except Exception:
                 # Chart creation should not break export
                 pass
