@@ -764,6 +764,12 @@ class RnSApp(QtWidgets.QMainWindow):
 
         rows: list[dict] = []
         for row in range(self.data_table.rowCount()):
+            num_item = self.data_table.item(row, DataTableColumns.NUMBER.index)
+            number_val = None
+            if num_item and num_item.text():
+                with contextlib.suppress(Exception):
+                    # Keep numeric if possible to preserve ordering in Excel
+                    number_val = int(float(num_item.text()))
             name_item = self.data_table.item(row, DataTableColumns.NAME.index)
             name_val = name_item.text().strip() if name_item and name_item.text() else ""
             diam_item = self.data_table.item(row, DataTableColumns.DIAMETER.index)
@@ -776,7 +782,7 @@ class RnSApp(QtWidgets.QMainWindow):
             if any([name_val, selected, diam_val not in (None, "")]):
                 rows.append(
                     {
-                        "number": row + 1,
+                        "number": number_val if number_val not in (None, "") else row + 1,
                         "name": name_val,
                         "selected": selected,
                         "diameter": diam_val,
