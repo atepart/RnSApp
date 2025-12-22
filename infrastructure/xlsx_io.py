@@ -19,7 +19,7 @@ from domain.models import InitialDataItem, InitialDataItemList
 from domain.ports import CellDataIO, CellRepository
 from domain.utils import (
     calculate_drift,
-    calculate_real_area,
+    calculate_real_custom_area,
     calculate_rn_sqrt,
     calculate_rns,
     calculate_rns_per_sample,
@@ -306,6 +306,10 @@ class XlsxCellIO(CellDataIO):
             s_custom1_ref = result_ref(ParamTableColumns.S_CUSTOM1)
             s_custom2_ref = result_ref(ParamTableColumns.S_CUSTOM2)
             s_custom3_ref = result_ref(ParamTableColumns.S_CUSTOM3)
+            planned_drift_ref = result_ref(ParamTableColumns.PLANNED_DRIFT)
+            d_custom1_ref = result_ref(ParamTableColumns.D_CUSTOM1)
+            d_custom2_ref = result_ref(ParamTableColumns.D_CUSTOM2)
+            d_custom3_ref = result_ref(ParamTableColumns.D_CUSTOM3)
 
             rn_sqrt_range = (
                 f"{data_col_letter[DataTableColumns.RN_SQRT]}2:{data_col_letter[DataTableColumns.RN_SQRT]}{data_max_row}"
@@ -364,22 +368,28 @@ class XlsxCellIO(CellDataIO):
 
             s_real_c1_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM1])
             s_real_c1_cell.value = (
-                f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom1_ref})),"",'
-                f'IFERROR(PI()*(SQRT(4*{s_custom1_ref}/PI())-{drift_ref})^2/4,""))'
+                f'=IF(AND(ISBLANK({d_custom1_ref}),ISBLANK({s_custom1_ref})),"",'
+                f"IFERROR(PI()/4*("
+                f"IF(ISBLANK({d_custom1_ref}),SQRT(4*{s_custom1_ref}/PI()),{d_custom1_ref})"
+                f'+{planned_drift_ref}-{drift_ref})^2,""))'
             )
             s_real_c1_cell.number_format = "0.000"
 
             s_real_c2_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM2])
             s_real_c2_cell.value = (
-                f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom2_ref})),"",'
-                f'IFERROR(PI()*(SQRT(4*{s_custom2_ref}/PI())-{drift_ref})^2/4,""))'
+                f'=IF(AND(ISBLANK({d_custom2_ref}),ISBLANK({s_custom2_ref})),"",'
+                f"IFERROR(PI()/4*("
+                f"IF(ISBLANK({d_custom2_ref}),SQRT(4*{s_custom2_ref}/PI()),{d_custom2_ref})"
+                f'+{planned_drift_ref}-{drift_ref})^2,""))'
             )
             s_real_c2_cell.number_format = "0.000"
 
             s_real_c3_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.S_REAL_CUSTOM3])
             s_real_c3_cell.value = (
-                f'=IF(OR(ISBLANK({drift_ref}),ISBLANK({s_custom3_ref})),"",'
-                f'IFERROR(PI()*(SQRT(4*{s_custom3_ref}/PI())-{drift_ref})^2/4,""))'
+                f'=IF(AND(ISBLANK({d_custom3_ref}),ISBLANK({s_custom3_ref})),"",'
+                f"IFERROR(PI()/4*("
+                f"IF(ISBLANK({d_custom3_ref}),SQRT(4*{s_custom3_ref}/PI()),{d_custom3_ref})"
+                f'+{planned_drift_ref}-{drift_ref})^2,""))'
             )
             s_real_c3_cell.number_format = "0.000"
 
@@ -684,6 +694,7 @@ class XlsxCellIO(CellDataIO):
             d_custom1 = read_param(ParamTableColumns.D_CUSTOM1, default=0.0)
             d_custom2 = read_param(ParamTableColumns.D_CUSTOM2, default=0.0)
             d_custom3 = read_param(ParamTableColumns.D_CUSTOM3, default=0.0)
+            planned_drift = read_param(ParamTableColumns.PLANNED_DRIFT, default=1.0)
 
             rows_data: List[Dict[str, Any]] = []
             for row in range(2, max_data_row + 1):
@@ -778,16 +789,21 @@ class XlsxCellIO(CellDataIO):
                     with contextlib.suppress(Exception):
                         rd["rns_error"] = abs(float(rd["rns"]) - float(rns))
 
-            def calc_area(area_nominal):
+            def calc_area(area_nominal, desired_diameter):
                 with contextlib.suppress(Exception):
                     if area_nominal is None:
                         return 0.0
-                    return calculate_real_area(area_nominal=float(area_nominal), drift=float(drift))
+                    return calculate_real_custom_area(
+                        area_nominal=float(area_nominal),
+                        desired_diameter=desired_diameter,
+                        planned_drift=float(planned_drift or 0.0),
+                        drift=float(drift),
+                    )
                 return 0.0
 
-            s_real_c1 = calc_area(s_custom1)
-            s_real_c2 = calc_area(s_custom2)
-            s_real_c3 = calc_area(s_custom3)
+            s_real_c1 = calc_area(s_custom1, d_custom1)
+            s_real_c2 = calc_area(s_custom2, d_custom2)
+            s_real_c3 = calc_area(s_custom3, d_custom3)
 
             initial_data = InitialDataItemList()
 
@@ -833,6 +849,7 @@ class XlsxCellIO(CellDataIO):
                     "d_custom1": d_custom1 if d_custom1 is not None else 0.0,
                     "d_custom2": d_custom2 if d_custom2 is not None else 0.0,
                     "d_custom3": d_custom3 if d_custom3 is not None else 0.0,
+                    "planned_drift": planned_drift if planned_drift is not None else 0.0,
                     "s_real_custom1": s_real_c1,
                     "s_real_custom2": s_real_c2,
                     "s_real_custom3": s_real_c3,

@@ -77,6 +77,7 @@ class Item:
         d_custom1: float = 0.0,
         d_custom2: float = 0.0,
         d_custom3: float = 0.0,
+        planned_drift: float = 1.0,
         s_real_custom1: float = 0,
         s_real_custom2: float = 0,
         s_real_custom3: float = 0,
@@ -102,6 +103,7 @@ class Item:
         self.d_custom1 = d_custom1
         self.d_custom2 = d_custom2
         self.d_custom3 = d_custom3
+        self.planned_drift = planned_drift
         self.s_real_custom1 = s_real_custom1
         self.s_real_custom2 = s_real_custom2
         self.s_real_custom3 = s_real_custom3

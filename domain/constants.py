@@ -69,6 +69,7 @@ class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):
     RNS_ERROR = ("Ошибка RnS", float, "rns_error")
     RN_CONSISTENT = ("Последовательное Rn", float, "rn_consistent")
     ALLOWED_ERROR = ("Допустимое отклонение (%)", float, "allowed_error")
+    PLANNED_DRIFT = ("Заложенный уход (μm)", float, "planned_drift")
     S_CUSTOM1 = ("Заданная площадь S1 (μm²)", float, "s_custom1")
     S_CUSTOM2 = ("Заданная площадь S2 (μm²)", float, "s_custom2")
     S_CUSTOM3 = ("Заданная площадь S3 (μm²)", float, "s_custom3")

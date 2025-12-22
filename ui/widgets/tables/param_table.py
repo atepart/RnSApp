@@ -41,6 +41,7 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
                 ParamTableColumns.DRIFT.index,
                 ParamTableColumns.RNS_ERROR.index,
                 ParamTableColumns.DRIFT_ERROR.index,
+                ParamTableColumns.PLANNED_DRIFT.index,
                 ParamTableColumns.S_REAL_CUSTOM1.index,
                 ParamTableColumns.S_REAL_CUSTOM2.index,
                 ParamTableColumns.S_REAL_CUSTOM3.index,
@@ -59,6 +60,7 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM1.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM2.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM3.index, RoundedDelegate(rounded=3, parent=self))
+        self.setItemDelegateForColumn(ParamTableColumns.PLANNED_DRIFT.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.D_CUSTOM1.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.D_CUSTOM2.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.D_CUSTOM3.index, RoundedDelegate(rounded=3, parent=self))
@@ -74,6 +76,7 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(ParamTableColumns.D_CUSTOM1.index, True)
         self.setColumnHidden(ParamTableColumns.D_CUSTOM2.index, True)
         self.setColumnHidden(ParamTableColumns.D_CUSTOM3.index, True)
+        self.setColumnHidden(ParamTableColumns.PLANNED_DRIFT.index, True)
 
         self.clear_all()
 
@@ -93,6 +96,7 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItem(0, ParamTableColumns.RNS_ERROR.index, TableWidgetItem(str(data.rns_error)))
         self.setItem(0, ParamTableColumns.RN_CONSISTENT.index, TableWidgetItem(str(data.rn_consistent)))
         self.setItem(0, ParamTableColumns.ALLOWED_ERROR.index, TableWidgetItem(str(data.allowed_error)))
+        self.setItem(0, ParamTableColumns.PLANNED_DRIFT.index, TableWidgetItem(str(getattr(data, "planned_drift", ""))))
         self.setItem(0, ParamTableColumns.S_CUSTOM1.index, TableWidgetItem(str(data.s_custom1)))
         self.setItem(0, ParamTableColumns.S_CUSTOM2.index, TableWidgetItem(str(data.s_custom2)))
         self.setItem(0, ParamTableColumns.S_CUSTOM3.index, TableWidgetItem(str(data.s_custom3)))
