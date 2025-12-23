@@ -52,9 +52,6 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
         (ParamTableColumns.S_CUSTOM1, areas.get("s_custom1")),
         (ParamTableColumns.S_CUSTOM2, areas.get("s_custom2")),
         (ParamTableColumns.S_CUSTOM3, areas.get("s_custom3")),
-        (ParamTableColumns.D_CUSTOM1, areas.get("d_custom1")),
-        (ParamTableColumns.D_CUSTOM2, areas.get("d_custom2")),
-        (ParamTableColumns.D_CUSTOM3, areas.get("d_custom3")),
         (ParamTableColumns.PLANNED_DRIFT, areas.get("planned_drift")),
     ]
     # Only keep params that were provided (non-None)
@@ -154,18 +151,12 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
         "s_custom1": None,
         "s_custom2": None,
         "s_custom3": None,
-        "d_custom1": None,
-        "d_custom2": None,
-        "d_custom3": None,
         "planned_drift": None,
     }
     for param, key in (
         (ParamTableColumns.S_CUSTOM1, "s_custom1"),
         (ParamTableColumns.S_CUSTOM2, "s_custom2"),
         (ParamTableColumns.S_CUSTOM3, "s_custom3"),
-        (ParamTableColumns.D_CUSTOM1, "d_custom1"),
-        (ParamTableColumns.D_CUSTOM2, "d_custom2"),
-        (ParamTableColumns.D_CUSTOM3, "d_custom3"),
         (ParamTableColumns.PLANNED_DRIFT, "planned_drift"),
     ):
         col = col_for(param.name)

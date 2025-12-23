@@ -29,9 +29,6 @@ class CalculationService:
         s_custom1_widget=None,
         s_custom2_widget=None,
         s_custom3_widget=None,
-        d_custom1_widget=None,
-        d_custom2_widget=None,
-        d_custom3_widget=None,
         planned_drift_widget=None,
     ) -> None:
         self.data_table = data_table
@@ -41,9 +38,6 @@ class CalculationService:
         self.s_custom1_widget = s_custom1_widget
         self.s_custom2_widget = s_custom2_widget
         self.s_custom3_widget = s_custom3_widget
-        self.d_custom1_widget = d_custom1_widget
-        self.d_custom2_widget = d_custom2_widget
-        self.d_custom3_widget = d_custom3_widget
         self.planned_drift_widget = planned_drift_widget
 
     def calculate_results(self):
@@ -118,59 +112,29 @@ class CalculationService:
                 self.param_table.setItem(0, ParamTableColumns.S_CUSTOM3.index, TableWidgetItem(str(s_nom3)))
         except Exception:
             pass
-        try:
-            if self.d_custom1_widget is not None:
-                self.param_table.setItem(
-                    0, ParamTableColumns.D_CUSTOM1.index, TableWidgetItem(str(float(self.d_custom1_widget.value())))
-                )
-        except Exception:
-            pass
-        try:
-            if self.d_custom2_widget is not None:
-                self.param_table.setItem(
-                    0, ParamTableColumns.D_CUSTOM2.index, TableWidgetItem(str(float(self.d_custom2_widget.value())))
-                )
-        except Exception:
-            pass
-        try:
-            if self.d_custom3_widget is not None:
-                self.param_table.setItem(
-                    0, ParamTableColumns.D_CUSTOM3.index, TableWidgetItem(str(float(self.d_custom3_widget.value())))
-                )
-        except Exception:
-            pass
 
         # Real areas for nominal S1..S3 if provided
         try:
             if self.s_custom1_widget is not None:
                 s_nom1 = float(self.s_custom1_widget.value())
-                d_star = float(self.d_custom1_widget.value()) if self.d_custom1_widget is not None else 0.0
                 planned = float(self.planned_drift_widget.value()) if self.planned_drift_widget is not None else 0.0
-                s_real_c1 = calculate_real_custom_area(
-                    area_nominal=s_nom1, desired_diameter=d_star, planned_drift=planned, drift=drift
-                )
+                s_real_c1 = calculate_real_custom_area(area_nominal=s_nom1, planned_drift=planned, drift=drift)
                 self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM1.index, TableWidgetItem(str(s_real_c1)))
         except Exception:
             pass
         try:
             if self.s_custom2_widget is not None:
                 s_nom2 = float(self.s_custom2_widget.value())
-                d_star = float(self.d_custom2_widget.value()) if self.d_custom2_widget is not None else 0.0
                 planned = float(self.planned_drift_widget.value()) if self.planned_drift_widget is not None else 0.0
-                s_real_c2 = calculate_real_custom_area(
-                    area_nominal=s_nom2, desired_diameter=d_star, planned_drift=planned, drift=drift
-                )
+                s_real_c2 = calculate_real_custom_area(area_nominal=s_nom2, planned_drift=planned, drift=drift)
                 self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM2.index, TableWidgetItem(str(s_real_c2)))
         except Exception:
             pass
         try:
             if self.s_custom3_widget is not None:
                 s_nom3 = float(self.s_custom3_widget.value())
-                d_star = float(self.d_custom3_widget.value()) if self.d_custom3_widget is not None else 0.0
                 planned = float(self.planned_drift_widget.value()) if self.planned_drift_widget is not None else 0.0
-                s_real_c3 = calculate_real_custom_area(
-                    area_nominal=s_nom3, desired_diameter=d_star, planned_drift=planned, drift=drift
-                )
+                s_real_c3 = calculate_real_custom_area(area_nominal=s_nom3, planned_drift=planned, drift=drift)
                 self.param_table.setItem(0, ParamTableColumns.S_REAL_CUSTOM3.index, TableWidgetItem(str(s_real_c3)))
         except Exception:
             pass

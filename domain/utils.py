@@ -98,28 +98,16 @@ def calculate_real_area(area_nominal: float, drift: float) -> float:
     return np.pi * (d0 - drift) ** 2 / 4
 
 
-def calculate_real_custom_area(
-    area_nominal: float | None, desired_diameter: float | None, planned_drift: float, drift: float
-) -> float:
-    """Calculate real area using desired diameter, planned drift (d), and actual drift (l).
+def calculate_real_custom_area(area_nominal: float | None, planned_drift: float, drift: float) -> float:
+    """Calculate real area for custom S* with planned drift d and actual drift l.
 
-    S_real = π/4 * (D* + d - l)^2, where D* is desired diameter (from input or derived from S*).
+    D* = sqrt(4/π * S*); S_real = π/4 * (D* - l + d)^2
     """
-    d_star = None
     with np.errstate(all="ignore"):
-        if desired_diameter not in (None, "", 0):
-            try:
-                d_star = float(desired_diameter)
-            except Exception:
-                d_star = None
-        if d_star in (None, "", 0) and area_nominal not in (None, "", 0):
-            try:
-                d_star = float(np.sqrt(4 * float(area_nominal) / np.pi))
-            except Exception:
-                d_star = None
-        if d_star in (None, "", 0):
+        if area_nominal in (None, "", 0):
             return 0.0
         try:
-            return float(np.pi * (d_star + planned_drift - drift) ** 2 / 4)
+            d_star = float(np.sqrt(4 * float(area_nominal) / np.pi))
+            return float(np.pi * (d_star - float(drift) + float(planned_drift)) ** 2 / 4)
         except Exception:
             return 0.0

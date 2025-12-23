@@ -45,7 +45,8 @@ class RnSApp(QtWidgets.QMainWindow):
 
         # Контейнер действий без рамки группы
         self.actions_group = QtWidgets.QWidget()
-        self.actions_layout = QtWidgets.QHBoxLayout()
+        self.actions_layout = QtWidgets.QGridLayout()
+        self.actions_layout.setSpacing(6)
 
         self.result_button = QtWidgets.QPushButton("Рассчитать")
         self.result_button.setToolTip("Произвести расчеты")
@@ -67,10 +68,10 @@ class RnSApp(QtWidgets.QMainWindow):
         for btn in (self.result_button, self.clean_rn_button, self.clean_all_button, self.open_template_button):
             btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
 
-        self.actions_layout.addWidget(self.result_button)
-        self.actions_layout.addWidget(self.clean_rn_button)
-        self.actions_layout.addWidget(self.clean_all_button)
-        self.actions_layout.addWidget(self.open_template_button)
+        self.actions_layout.addWidget(self.result_button, 0, 0)
+        self.actions_layout.addWidget(self.clean_rn_button, 0, 1)
+        self.actions_layout.addWidget(self.clean_all_button, 1, 0)
+        self.actions_layout.addWidget(self.open_template_button, 1, 1)
         self.actions_group.setLayout(self.actions_layout)
 
         # Поля параметров ввода как аккуратные лейблы + спинбоксы
@@ -78,44 +79,38 @@ class RnSApp(QtWidgets.QMainWindow):
         self.rn_consistent.setRange(0, 100)
         self.rn_consistent.setDecimals(2)
         self.rn_consistent.setValue(0)
+        self.rn_consistent.setSuffix(" Ω")
 
         self.allowed_error = QtWidgets.QDoubleSpinBox(self)
         self.allowed_error.setRange(0, 100)
         self.allowed_error.setDecimals(2)
         self.allowed_error.setValue(2.5)
+        self.allowed_error.setSuffix(" %")
 
         planned_hint = "Разница между вводимым и желаемым диаметрами"
         self.planned_drift = QtWidgets.QDoubleSpinBox(self)
         self.planned_drift.setDecimals(3)
         self.planned_drift.setRange(0, 100000)
-        self.planned_drift.setValue(1.0)
+        self.planned_drift.setValue(0.46)
         self.planned_drift.setToolTip(planned_hint)
+        self.planned_drift.setSuffix(" μm")
 
         # Площади (S1-S3) и диаметры (D1-D3)
         self.s_custom1 = QtWidgets.QDoubleSpinBox(self)
         self.s_custom1.setDecimals(3)
         self.s_custom1.setRange(0, 100000)
         self.s_custom1.setValue(1.0)
+        self.s_custom1.setSuffix(" μm²")
         self.s_custom2 = QtWidgets.QDoubleSpinBox(self)
         self.s_custom2.setDecimals(3)
         self.s_custom2.setRange(0, 100000)
         self.s_custom2.setValue(1.0)
+        self.s_custom2.setSuffix(" μm²")
         self.s_custom3 = QtWidgets.QDoubleSpinBox(self)
         self.s_custom3.setDecimals(3)
         self.s_custom3.setRange(0, 100000)
         self.s_custom3.setValue(1.0)
-        self.d_custom1 = QtWidgets.QDoubleSpinBox(self)
-        self.d_custom1.setDecimals(3)
-        self.d_custom1.setRange(0, 100000)
-        self.d_custom1.setValue(0.0)
-        self.d_custom2 = QtWidgets.QDoubleSpinBox(self)
-        self.d_custom2.setDecimals(3)
-        self.d_custom2.setRange(0, 100000)
-        self.d_custom2.setValue(0.0)
-        self.d_custom3 = QtWidgets.QDoubleSpinBox(self)
-        self.d_custom3.setDecimals(3)
-        self.d_custom3.setRange(0, 100000)
-        self.d_custom3.setValue(0.0)
+        self.s_custom3.setSuffix(" μm²")
 
         # Контейнер без заголовка; сами ячейки остаются группами
         self.cell_group = QtWidgets.QWidget()
@@ -174,48 +169,36 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_layout = QtWidgets.QVBoxLayout()
         inputs_layout.setContentsMargins(6, 6, 6, 6)
         inputs_layout.setSpacing(6)
-        # Grid of parameter groups: Rn block plus S/D pairs
-        inputs_grid = QtWidgets.QGridLayout()
-        inputs_grid.setContentsMargins(0, 0, 0, 0)
-        inputs_grid.setHorizontalSpacing(12)
-        inputs_grid.setVerticalSpacing(6)
 
-        def _make_group(label_text_top: str, widget_top: QtWidgets.QWidget, label_text_bottom: str, widget_bottom):
-            vbox = QtWidgets.QVBoxLayout()
-            vbox.setSpacing(4)
-            vbox.addWidget(QtWidgets.QLabel(label_text_top))
-            vbox.addWidget(widget_top)
-            vbox.addWidget(QtWidgets.QLabel(label_text_bottom))
-            vbox.addWidget(widget_bottom)
-            return vbox
+        # Two columns: left (Rn/allowed/planned drift), right (S1-3)
+        def add_labeled(vbox: QtWidgets.QVBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None):
+            lbl = QtWidgets.QLabel(label)
+            if tooltip:
+                lbl.setToolTip(tooltip)
+                widget.setToolTip(tooltip)
+            vbox.addWidget(lbl)
+            vbox.addWidget(widget)
 
-        rn_group = _make_group(
-            "Последовательное Rn (Ω):", self.rn_consistent, "Допустимое отклонение (%):", self.allowed_error
-        )
-        s1_group = _make_group(
-            "Заданная площадь S1 (μm²):", self.s_custom1, "Заданный диаметр D1 (μm):", self.d_custom1
-        )
-        s2_group = _make_group(
-            "Заданная площадь S2 (μm²):", self.s_custom2, "Заданный диаметр D2 (μm):", self.d_custom2
-        )
-        s3_group = _make_group(
-            "Заданная площадь S3 (μm²):", self.s_custom3, "Заданный диаметр D3 (μm):", self.d_custom3
-        )
+        columns_layout = QtWidgets.QHBoxLayout()
+        columns_layout.setContentsMargins(0, 0, 0, 0)
+        columns_layout.setSpacing(12)
 
-        planned_layout = QtWidgets.QVBoxLayout()
-        planned_layout.setSpacing(4)
-        planned_label = QtWidgets.QLabel("Заложенный уход (μm):")
-        planned_label.setToolTip(planned_hint)
-        planned_layout.addWidget(planned_label)
-        planned_layout.addWidget(self.planned_drift)
+        left_col = QtWidgets.QVBoxLayout()
+        left_col.setSpacing(6)
+        add_labeled(left_col, "Последовательное Rn:", self.rn_consistent)
+        add_labeled(left_col, "Допустимое отклонение:", self.allowed_error)
+        add_labeled(left_col, "Заложенный уход:", self.planned_drift, planned_hint)
 
-        inputs_grid.addLayout(rn_group, 0, 0)
-        inputs_grid.addLayout(s1_group, 0, 1)
-        inputs_grid.addLayout(s2_group, 0, 2)
-        inputs_grid.addLayout(s3_group, 0, 3)
-        inputs_grid.addLayout(planned_layout, 1, 0, 1, 4)
+        right_col = QtWidgets.QVBoxLayout()
+        right_col.setSpacing(6)
+        add_labeled(right_col, "Заданная площадь S1 (μm²):", self.s_custom1)
+        add_labeled(right_col, "Заданная площадь S2 (μm²):", self.s_custom2)
+        add_labeled(right_col, "Заданная площадь S3 (μm²):", self.s_custom3)
 
-        inputs_layout.addLayout(inputs_grid)
+        columns_layout.addLayout(left_col, 1)
+        columns_layout.addLayout(right_col, 1)
+
+        inputs_layout.addLayout(columns_layout)
         inputs_layout.addStretch(1)
         inputs_layout.addWidget(self.actions_group)
         inputs_container.setLayout(inputs_layout)
@@ -297,9 +280,6 @@ class RnSApp(QtWidgets.QMainWindow):
             s_custom1_widget=self.s_custom1,
             s_custom2_widget=self.s_custom2,
             s_custom3_widget=self.s_custom3,
-            d_custom1_widget=self.d_custom1,
-            d_custom2_widget=self.d_custom2,
-            d_custom3_widget=self.d_custom3,
             planned_drift_widget=self.planned_drift,
         )
         self.plot_service = PlotService(self.plot, self.data_table, self.param_table)
@@ -608,9 +588,6 @@ class RnSApp(QtWidgets.QMainWindow):
             s_custom1=self.s_custom1.value(),
             s_custom2=self.s_custom2.value(),
             s_custom3=self.s_custom3.value(),
-            d_custom1=self.d_custom1.value(),
-            d_custom2=self.d_custom2.value(),
-            d_custom3=self.d_custom3.value(),
             planned_drift=self.planned_drift.value(),
             s_real_custom1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM1),
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
@@ -652,9 +629,6 @@ class RnSApp(QtWidgets.QMainWindow):
                 ParamTableColumns.S_CUSTOM1.slug: self.s_custom1.value(),
                 ParamTableColumns.S_CUSTOM2.slug: self.s_custom2.value(),
                 ParamTableColumns.S_CUSTOM3.slug: self.s_custom3.value(),
-                ParamTableColumns.D_CUSTOM1.slug: self.d_custom1.value(),
-                ParamTableColumns.D_CUSTOM2.slug: self.d_custom2.value(),
-                ParamTableColumns.D_CUSTOM3.slug: self.d_custom3.value(),
                 ParamTableColumns.PLANNED_DRIFT.slug: self.planned_drift.value(),
             }
         )
@@ -674,9 +648,6 @@ class RnSApp(QtWidgets.QMainWindow):
             ParamTableColumns.S_CUSTOM1,
             ParamTableColumns.S_CUSTOM2,
             ParamTableColumns.S_CUSTOM3,
-            ParamTableColumns.D_CUSTOM1,
-            ParamTableColumns.D_CUSTOM2,
-            ParamTableColumns.D_CUSTOM3,
         ]
         is_dirty = False
         for col in compare_cols:
@@ -797,9 +768,6 @@ class RnSApp(QtWidgets.QMainWindow):
             "s_custom1": float(self.s_custom1.value()) if self.s_custom1 is not None else None,
             "s_custom2": float(self.s_custom2.value()) if self.s_custom2 is not None else None,
             "s_custom3": float(self.s_custom3.value()) if self.s_custom3 is not None else None,
-            "d_custom1": float(self.d_custom1.value()) if self.d_custom1 is not None else None,
-            "d_custom2": float(self.d_custom2.value()) if self.d_custom2 is not None else None,
-            "d_custom3": float(self.d_custom3.value()) if self.d_custom3 is not None else None,
             "planned_drift": float(self.planned_drift.value()) if self.planned_drift is not None else None,
         }
 
@@ -843,12 +811,6 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.s_custom2.setValue(float(areas["s_custom2"]))
             if areas.get("s_custom3") is not None:
                 self.s_custom3.setValue(float(areas["s_custom3"]))
-            if areas.get("d_custom1") is not None:
-                self.d_custom1.setValue(float(areas["d_custom1"]))
-            if areas.get("d_custom2") is not None:
-                self.d_custom2.setValue(float(areas["d_custom2"]))
-            if areas.get("d_custom3") is not None:
-                self.d_custom3.setValue(float(areas["d_custom3"]))
             if areas.get("planned_drift") is not None:
                 self.planned_drift.setValue(float(areas["planned_drift"]))
 
@@ -877,15 +839,6 @@ class RnSApp(QtWidgets.QMainWindow):
         with contextlib.suppress(Exception):
             if getattr(cell_data, "s_custom3", None) not in (None, ""):
                 self.s_custom3.setValue(float(cell_data.s_custom3))
-        with contextlib.suppress(Exception):
-            if getattr(cell_data, "d_custom1", None) not in (None, ""):
-                self.d_custom1.setValue(float(cell_data.d_custom1))
-        with contextlib.suppress(Exception):
-            if getattr(cell_data, "d_custom2", None) not in (None, ""):
-                self.d_custom2.setValue(float(cell_data.d_custom2))
-        with contextlib.suppress(Exception):
-            if getattr(cell_data, "d_custom3", None) not in (None, ""):
-                self.d_custom3.setValue(float(cell_data.d_custom3))
         with contextlib.suppress(Exception):
             if getattr(cell_data, "planned_drift", None) not in (None, ""):
                 self.planned_drift.setValue(float(cell_data.planned_drift))
