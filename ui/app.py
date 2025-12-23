@@ -7,7 +7,7 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction, QDesktopServices, QIcon
-from PySide6.QtWidgets import QApplication, QInputDialog
+from PySide6.QtWidgets import QApplication
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
 from application.calculations import CalculationService
@@ -707,31 +707,17 @@ class RnSApp(QtWidgets.QMainWindow):
         )
 
     def create_template(self):
-        name, ok = QInputDialog.getText(self, "Создать шаблон", "Введите уникальное имя шаблона:")
-        if not ok:
-            return
-        name = name.strip()
-        if not name:
-            QtWidgets.QMessageBox.warning(self, "Пустое имя", "Имя шаблона не может быть пустым.")
-            return
-
         start_dir = self._get_initial_directory()
-        default_path = os.path.join(start_dir, f"{name}.xlsx")
         file_name, _ = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Сохранить шаблон",
-            default_path,
+            start_dir,
             "Excel Files (*.xlsx);;All Files (*)",
         )
         if not file_name:
             return
         if not file_name.endswith(".xlsx"):
             file_name += ".xlsx"
-        if os.path.exists(file_name):
-            QtWidgets.QMessageBox.warning(
-                self, "Имя уже занято", "Файл с таким именем уже существует, выберите другое."
-            )
-            return
 
         rows: list[dict] = []
         for row in range(self.data_table.rowCount()):
@@ -772,7 +758,7 @@ class RnSApp(QtWidgets.QMainWindow):
         }
 
         try:
-            saved_path = save_template(file_path=file_name, sheet_name=name, rows=rows, areas=areas)
+            saved_path = save_template(file_path=file_name, sheet_name=file_name, rows=rows, areas=areas)
             self._remember_path(saved_path)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить шаблон: {e}")
