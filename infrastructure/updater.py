@@ -49,6 +49,7 @@ class ReleaseInfo:
     published_at: str | None
     asset: Optional[ReleaseAsset]
     prerelease: bool | None = None
+    body: str | None = None
 
 
 logger = logging.getLogger(__name__)
@@ -272,7 +273,13 @@ def find_latest_release(repo_slug: str) -> Optional[ReleaseInfo]:
     tag = latest.get("tag_name") or latest.get("name")
     published_at = latest.get("published_at")
     asset = _select_asset_for_current_platform(tag, latest.get("assets", []) or [])
-    return ReleaseInfo(tag=tag, published_at=published_at, asset=asset, prerelease=latest.get("prerelease"))
+    return ReleaseInfo(
+        tag=tag,
+        published_at=published_at,
+        asset=asset,
+        prerelease=latest.get("prerelease"),
+        body=latest.get("body"),
+    )
 
 
 def list_releases(repo_slug: str, limit: int = 10) -> list[ReleaseInfo]:
@@ -290,6 +297,7 @@ def list_releases(repo_slug: str, limit: int = 10) -> list[ReleaseInfo]:
             published_at=r.get("published_at"),
             asset=_select_asset_for_current_platform(tag, r.get("assets", []) or []),
             prerelease=r.get("prerelease"),
+            body=r.get("body"),
         )
         items.append(ri)
 
