@@ -80,6 +80,22 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
         ws.cell(row=start_row + i, column=1).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=start_row + i, column=3).alignment = Alignment(horizontal="center", vertical="center")
 
+    # Autofit widths for all columns based on content
+    def _autofit(col_idx: int, extra: int = 2, min_width: int = 10):
+        try:
+            max_len = 0
+            for r in range(1, ws.max_row + 1):
+                val = ws.cell(row=r, column=col_idx).value
+                if val is None:
+                    continue
+                max_len = max(max_len, len(str(val)))
+            ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = max(max_len + extra, min_width)
+        except Exception:
+            pass
+
+    for c in range(1, ws.max_column + 1):
+        _autofit(c)
+
     if not file_path.endswith(".xlsx"):
         file_path += ".xlsx"
     wb.save(file_path)

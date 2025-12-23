@@ -198,14 +198,12 @@ class XlsxCellIO(CellDataIO):
             sheet_name = _compose_cell_sheet_title(cell_data.cell, cell_data.name, wb.sheetnames)
             ws = wb.create_sheet(sheet_name)
 
-            # Write data header (row 1) with styling and width based on header text
+            # Write data header (row 1) with styling; widths will be autofit below
             for col_idx, col_def in enumerate(export_data_columns, start=1):
                 hcell = ws.cell(row=1, column=col_idx, value=col_def.slug)
                 hcell.font = Font(bold=True)
                 hcell.border = Border(bottom=Side(style="medium"))
                 hcell.alignment = Alignment(horizontal="center", vertical="center")
-                with contextlib.suppress(Exception):
-                    ws.column_dimensions[get_column_letter(col_idx)].width = max(len(str(col_def.slug)) + 2, 10)
 
             # Write data values from InitialDataItemList
             # Determine how many rows are present in initial data
@@ -243,10 +241,6 @@ class XlsxCellIO(CellDataIO):
                 hcell.font = Font(bold=True)
                 hcell.border = Border(bottom=Side(style="medium"))
                 hcell.alignment = Alignment(horizontal="center", vertical="center")
-                with contextlib.suppress(Exception):
-                    ws.column_dimensions[get_column_letter(results_start_col + i)].width = max(
-                        len(str(param.name)) + 2, 10
-                    )
 
                 # Value row (2)
                 raw_value = getattr(cell_data, param.slug, "")
@@ -255,6 +249,24 @@ class XlsxCellIO(CellDataIO):
                 vcell.alignment = Alignment(horizontal="center", vertical="center")
                 if param.dtype is float and value not in (None, ""):
                     vcell.number_format = "0.000"
+
+            # Autofit widths for data and results columns based on content
+            def _autofit(col_idx: int, extra: int = 2, min_width: int = 10):
+                try:
+                    max_len = 0
+                    for r in range(1, ws.max_row + 1):
+                        val = ws.cell(row=r, column=col_idx).value
+                        if val is None:
+                            continue
+                        max_len = max(max_len, len(str(val)))
+                    ws.column_dimensions[get_column_letter(col_idx)].width = max(max_len + extra, min_width)
+                except Exception:
+                    pass
+
+            for col_idx in range(1, len(export_data_columns) + 1):
+                _autofit(col_idx)
+            for i, _ in enumerate(results_params, start=0):
+                _autofit(results_start_col + i)
 
             # Column mapping for clarity (Excel letters)
             results_row = 2
