@@ -647,6 +647,8 @@ class XlsxCellIO(CellDataIO):
 
             header_aliases: Dict[ParamTableColumns, List[str]] = {
                 ParamTableColumns.S_REAL_CUSTOM1: ["S_1.00 (μm²)"],
+                # Backward compatibility with files, где колонка называлась Rn
+                ParamTableColumns.RN_CONSISTENT: ["Последовательное Rn"],
             }
 
             def last_col_for_param(param: ParamTableColumns) -> int | None:

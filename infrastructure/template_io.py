@@ -38,8 +38,10 @@ def _to_float(val):
 def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict[str, float | None]) -> str:
     """Create template workbook with headers and optional area/diameter columns."""
     wb = openpyxl.Workbook()
+    # Имя книги и листа строго фиксировано для шаблона
+    wb.properties.title = "template"
     ws = wb.active
-    ws.title = _sanitize_sheet_name(sheet_name)
+    ws.title = _sanitize_sheet_name("template")
 
     headers = [
         DataTableColumns.NUMBER.slug,

@@ -70,13 +70,15 @@ class RnSApp(QtWidgets.QMainWindow):
 
         self.actions_layout.addWidget(self.result_button, 0, 0)
         self.actions_layout.addWidget(self.clean_rn_button, 0, 1)
-        self.actions_layout.addWidget(self.clean_all_button, 1, 0)
-        self.actions_layout.addWidget(self.open_template_button, 1, 1)
+        self.actions_layout.addWidget(self.clean_all_button, 0, 2)
+        self.actions_layout.addWidget(self.open_template_button, 0, 3)
+        for col in range(4):
+            self.actions_layout.setColumnStretch(col, 1)
         self.actions_group.setLayout(self.actions_layout)
 
         # Поля параметров ввода как аккуратные лейблы + спинбоксы
         self.rn_consistent = QtWidgets.QDoubleSpinBox(self)
-        self.rn_consistent.setRange(0, 100)
+        self.rn_consistent.setRange(0, 200)
         self.rn_consistent.setDecimals(2)
         self.rn_consistent.setValue(0)
         self.rn_consistent.setSuffix(" Ω")
@@ -185,7 +187,7 @@ class RnSApp(QtWidgets.QMainWindow):
 
         left_col = QtWidgets.QVBoxLayout()
         left_col.setSpacing(6)
-        add_labeled(left_col, "Последовательное Rn:", self.rn_consistent)
+        add_labeled(left_col, "Последовательное R:", self.rn_consistent)
         add_labeled(left_col, "Допустимое отклонение:", self.allowed_error)
         add_labeled(left_col, "Заложенный уход:", self.planned_drift, planned_hint)
 
@@ -758,7 +760,7 @@ class RnSApp(QtWidgets.QMainWindow):
         }
 
         try:
-            saved_path = save_template(file_path=file_name, sheet_name=file_name, rows=rows, areas=areas)
+            saved_path = save_template(file_path=file_name, sheet_name="template", rows=rows, areas=areas)
             self._remember_path(saved_path)
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Ошибка сохранения", f"Не удалось сохранить шаблон: {e}")

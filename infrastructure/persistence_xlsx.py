@@ -126,7 +126,10 @@ def load_cells_from_xlsx(file_name: str):
 
         result_column_names = [ws_result[1][col].value for col in range(0, ws_result.max_column)]
         result_kwargs = {}
-        header_aliases = {ParamTableColumns.S_REAL_CUSTOM1: ["S_1.00 (μm²)"]}
+        header_aliases = {
+            ParamTableColumns.S_REAL_CUSTOM1: ["S_1.00 (μm²)"],
+            ParamTableColumns.RN_CONSISTENT: ["Последовательное Rn"],
+        }
         optional_slugs = {
             ParamTableColumns.S_REAL_CUSTOM1.slug,
             ParamTableColumns.S_REAL_CUSTOM2.slug,
