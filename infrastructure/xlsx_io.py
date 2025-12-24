@@ -83,11 +83,23 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
 
-    for col in ws_cells.columns:
-        column = col[0].column_letter
-        ws_cells.column_dimensions[column].width = 12
     for row in ws_cells.rows:
         ws_cells.row_dimensions[row[0].row].height = 21
+
+    # Autofit columns so long cell names/values are fully visible
+    def _autofit(col_idx: int, extra: int = 2, min_width: int = 12):
+        max_len = 0
+        for r in range(1, ws_cells.max_row + 1):
+            val = ws_cells.cell(row=r, column=col_idx).value
+            if val is None:
+                continue
+            max_len = max(max_len, len(str(val)))
+        if max_len == 0:
+            return
+        ws_cells.column_dimensions[get_column_letter(col_idx)].width = max(max_len + extra, min_width)
+
+    for col_idx in range(1, ws_cells.max_column + 1):
+        _autofit(col_idx)
 
 
 _SANITIZE_MAP = {

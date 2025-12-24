@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.utils import get_column_letter
 
 from domain.constants import DataTableColumns, ParamTableColumns
 from domain.models import InitialDataItem, InitialDataItemList
@@ -16,6 +17,18 @@ def save_cells_to_xlsx(
     data_headers,
     results_headers,
 ):
+    def _autofit(ws, extra: int = 2, min_width: int = 12):
+        for col_idx in range(1, ws.max_column + 1):
+            max_len = 0
+            for r in range(1, ws.max_row + 1):
+                val = ws.cell(row=r, column=col_idx).value
+                if val is None:
+                    continue
+                max_len = max(max_len, len(str(val)))
+            if max_len == 0:
+                continue
+            ws.column_dimensions[get_column_letter(col_idx)].width = max(max_len + extra, min_width)
+
     wb = openpyxl.Workbook()
     ws_cells = wb.active
     ws_cells.title = "Cells data"
@@ -42,22 +55,22 @@ def save_cells_to_xlsx(
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
 
-    for col in ws_cells.columns:
-        column = col[0].column_letter
-        ws_cells.column_dimensions[column].width = 12
     for row in ws_cells.rows:
         ws_cells.row_dimensions[row[0].row].height = 21
+    _autofit(ws_cells)
 
     for cell_data in repo:
         ws_data = wb.create_sheet(f"Data №{cell_data.cell} {cell_data.name}")
         ws_data.append(data_headers)
         for dat in cell_data.initial_data:
             ws_data.cell(row=dat["row"] + 2, column=dat["col"] + 1, value=dat["value"])
+        _autofit(ws_data)
 
         ws_results = wb.create_sheet(f"Results №{cell_data.cell} {cell_data.name}")
         ws_results.append(results_headers)
         for i, param in enumerate(ParamTableColumns):
             ws_results.cell(row=2, column=i + 1, value=getattr(cell_data, param.slug, ""))
+        _autofit(ws_results)
 
     if not file_name.endswith(".xlsx"):
         file_name += ".xlsx"
