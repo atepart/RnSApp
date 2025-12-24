@@ -729,11 +729,10 @@ class XlsxCellIO(CellDataIO):
                     "diameter": to_float(read_cell(row, diameter_col)),
                     "resistance": to_float(read_cell(row, resistance_col)),
                 }
-                if not row_dict["selected"] and any(
-                    v is not None for v in (row_dict["diameter"], row_dict["resistance"])
-                ):
-                    # Treat rows with numeric data as selected even if checkbox is empty
-                    row_dict["selected"] = True
+                if select_col is None and not row_dict["selected"]:
+                    # Older файлов без столбца выбора: считаем строки с данными выбранными
+                    if any(v is not None for v in (row_dict["diameter"], row_dict["resistance"])):
+                        row_dict["selected"] = True
                 rows_data.append(row_dict)
 
             # Calculate derived values based on parsed raw data
