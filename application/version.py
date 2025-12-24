@@ -1,3 +1,3 @@
 __all__ = ["__version__", "REPO_SLUG"]
-__version__ = "new105b2"
+__version__ = "new106"
 REPO_SLUG = "atepart/RnSApp"
