@@ -7,6 +7,9 @@ class CellRepository(Protocol):
     def update_or_create_item(self, cell: int, **kwargs) -> Item:
         ...
 
+    def delete_item(self, cell: int) -> None:
+        ...
+
     def get(self, **kwargs) -> Optional[Item]:
         ...
 

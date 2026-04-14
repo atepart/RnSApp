@@ -141,6 +141,18 @@ class CellWidget(QtWidgets.QGroupBox):
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             self.writeData()
 
+    def openClearDataDialog(self):
+        cell_name = self.name.text() or f"№{self.index}"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Очистить ячейку",
+            f"Все сохраненные данные ячейки {cell_name} будут удалены. Продолжить?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if reply == QtWidgets.QMessageBox.Yes:
+            self.app.clear_saved_cell(self.index)
+
     def showData(self):
         reply = QtWidgets.QMessageBox.question(
             self,
@@ -168,6 +180,12 @@ class CellWidget(QtWidgets.QGroupBox):
         rewriteAction.triggered.connect(self.openRewriteDataDialog)
         menu.addAction(rewriteAction)
 
+        menu.addSeparator()
+
+        clearAction = QtGui.QAction("Очистить", self)
+        clearAction.triggered.connect(self.openClearDataDialog)
+        menu.addAction(clearAction)
+
         menu.exec(self.mapToGlobal(position))
 
     def clear(self):
@@ -176,10 +194,13 @@ class CellWidget(QtWidgets.QGroupBox):
         self.drift.setText("")
         self.rns.setVisible(False)
         self.drift.setVisible(False)
+        checkbox_blocker = QtCore.QSignalBlocker(self.checkbox)
         self.checkbox.setChecked(False)
+        del checkbox_blocker
         self.checkbox.setVisible(False)
         self.writeButton.setVisible(True)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
+        self.set_dirty(False)
 
     def set_active(self, value: bool):
         if value:

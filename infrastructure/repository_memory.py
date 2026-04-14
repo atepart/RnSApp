@@ -21,6 +21,9 @@ class InMemoryCellRepository(CellRepository):
     def get(self, **kwargs) -> Optional[Item]:
         return self._data.get(**kwargs)
 
+    def delete_item(self, cell: int) -> None:
+        self._data = self._data.exclude(cell=cell)
+
     def clear(self) -> None:
         self._data = ItemsList()
 

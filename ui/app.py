@@ -134,17 +134,12 @@ class RnSApp(QtWidgets.QMainWindow):
         self.btn_load_cell_data.setToolTip("Открыть данные из xlsx файла")
         self.btn_load_cell_data.clicked.connect(self.load_cell_data)
 
-        self.btn_clear_cell_data = QtWidgets.QPushButton("Очистить ячейки")
-        self.btn_clear_cell_data.setToolTip("Очистить ячейки с записанными данными")
-        self.btn_clear_cell_data.clicked.connect(self.clear_cell_data)
-
         self.cell_save_button = QtWidgets.QPushButton("Сохранить")
         self.cell_save_button.setToolTip("Сохранить записанные данные с RnS")
         self.cell_save_button.clicked.connect(self.save_cell_data)
 
         self.cell_h_layout.addWidget(self.mean_drift)
         self.cell_h_layout.addWidget(self.mean_rns)
-        self.cell_h_layout.addWidget(self.btn_clear_cell_data)
         self.cell_h_layout.addWidget(self.btn_load_cell_data)
         self.cell_h_layout.addWidget(self.cell_save_button)
 
@@ -539,8 +534,14 @@ class RnSApp(QtWidgets.QMainWindow):
                 drift_list.append(drift)
             if rns:
                 rns_list.append(rns)
-        self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 3)}")
-        self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 1)}")
+        if drift_list:
+            self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 3)}")
+        else:
+            self.mean_drift.setText("Средний уход: --")
+        if rns_list:
+            self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 1)}")
+        else:
+            self.mean_rns.setText("Средний RnS: --")
 
     def clear_means(self):
         self.mean_drift.setText("Средний уход: --")
@@ -686,6 +687,17 @@ class RnSApp(QtWidgets.QMainWindow):
         drift = float(cell.drift.text().split("Уход: ")[1]) if cell.drift.text() else ""
         rns = float(cell.rns.text().split("RnS: ")[1]) if cell.rns.text() else ""
         return [cell.name.text(), drift, rns]
+
+    def clear_saved_cell(self, cell: int) -> None:
+        cell_data = self.repo.get(cell=cell)
+        if not cell_data:
+            return
+        self.remove_plot(cell)
+        self.repo.delete_item(cell)
+        self.cell_widgets[cell - 1].clear()
+        self.calculate_means()
+        if self.active_cell_index == cell:
+            self.set_active_cell(0)
 
     def save_cell_data(self):
         options = QtWidgets.QFileDialog.Options()
@@ -843,21 +855,6 @@ class RnSApp(QtWidgets.QMainWindow):
             with contextlib.suppress(Exception):
                 if not is_active:
                     cw.set_dirty(False)
-
-    def clear_cell_data(self):
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            "Очистить записанные данные ячеек",
-            "Записанные данные ячеек будут удалены, продолжить?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No,
-        )
-        if reply == QtWidgets.QMessageBox.Yes:
-            for cell in self.cell_widgets:
-                cell.clear()
-            self.repo.clear()
-            self.clear_means()
-            self.set_active_cell(0)
 
     def load_cell_data(self):
         reply = QtWidgets.QMessageBox.question(
