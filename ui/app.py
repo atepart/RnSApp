@@ -607,6 +607,8 @@ class RnSApp(QtWidgets.QMainWindow):
         rns_list = []
         drift_list = []
         for cell in self.cell_widgets:
+            if getattr(cell, "mean_excluded_checkbox", None) and cell.mean_excluded_checkbox.isChecked():
+                continue
             _, drift, rns = self.parse_cell(cell)
             if drift:
                 drift_list.append(drift)
@@ -673,6 +675,7 @@ class RnSApp(QtWidgets.QMainWindow):
             s_real_custom1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM1),
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
             s_real_custom3=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM3),
+            mean_excluded=self.cell_widgets[cell - 1].mean_excluded_checkbox.isChecked(),
         )
         self.set_active_cell(cell)
         # After saving, clear dirty indicator for this cell
@@ -974,6 +977,9 @@ class RnSApp(QtWidgets.QMainWindow):
                 cell_widget.drift.setText(f"Уход: {round(cell_item.drift, 3)}")
                 cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
                 cell_widget.updateUI()
+                blocker = QtCore.QSignalBlocker(cell_widget.mean_excluded_checkbox)
+                cell_widget.mean_excluded_checkbox.setChecked(bool(getattr(cell_item, "mean_excluded", False)))
+                del blocker
                 self.calculate_means()
 
             # Load first imported cell into current tables (so ParamTable shows S_real_* etc.)

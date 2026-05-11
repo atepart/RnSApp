@@ -112,6 +112,8 @@ _SANITIZE_MAP = {
     "]": "］",  # FULLWIDTH RIGHT SQUARE BRACKET
 }
 _DESANITIZE_MAP = {v: k for k, v in _SANITIZE_MAP.items()}
+MEAN_EXCLUDED_HEADER = "Не учитывать"
+MEAN_EXCLUDED_ATTR = "mean_excluded"
 
 
 def _sanitize_title_component(text: str) -> str:
@@ -262,6 +264,18 @@ class XlsxCellIO(CellDataIO):
                 if param.dtype is float and value not in (None, ""):
                     vcell.number_format = "0.000"
 
+            mean_excluded_col = results_start_col + len(results_params)
+            hcell = ws.cell(row=1, column=mean_excluded_col, value=MEAN_EXCLUDED_HEADER)
+            hcell.font = Font(bold=True)
+            hcell.border = Border(bottom=Side(style="medium"))
+            hcell.alignment = Alignment(horizontal="center", vertical="center")
+            vcell = ws.cell(
+                row=2,
+                column=mean_excluded_col,
+                value=bool(getattr(cell_data, MEAN_EXCLUDED_ATTR, False)),
+            )
+            vcell.alignment = Alignment(horizontal="center", vertical="center")
+
             # Autofit widths for data and results columns based on content
             def _autofit(col_idx: int, extra: int = 2, min_width: int = 10):
                 try:
@@ -279,6 +293,7 @@ class XlsxCellIO(CellDataIO):
                 _autofit(col_idx)
             for i, _ in enumerate(results_params, start=0):
                 _autofit(results_start_col + i)
+            _autofit(mean_excluded_col)
 
             # Column mapping for clarity (Excel letters)
             results_row = 2
@@ -716,6 +731,7 @@ class XlsxCellIO(CellDataIO):
             s_custom2 = read_param(ParamTableColumns.S_CUSTOM2, default=1.0)
             s_custom3 = read_param(ParamTableColumns.S_CUSTOM3, default=1.0)
             planned_drift = read_param(ParamTableColumns.PLANNED_DRIFT, default=1.0)
+            mean_excluded = to_bool(read_cell(2, last_col_for(MEAN_EXCLUDED_HEADER)))
 
             rows_data: List[Dict[str, Any]] = []
             for row in range(2, max_data_row + 1):
@@ -867,6 +883,7 @@ class XlsxCellIO(CellDataIO):
                     "s_real_custom1": s_real_c1,
                     "s_real_custom2": s_real_c2,
                     "s_real_custom3": s_real_c3,
+                    "mean_excluded": mean_excluded,
                 }
             )
 

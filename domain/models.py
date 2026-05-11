@@ -81,6 +81,7 @@ class Item:
         s_real_custom1: float = 0,
         s_real_custom2: float = 0,
         s_real_custom3: float = 0,
+        mean_excluded: bool = False,
     ) -> None:
         self.cell = cell
         self.name = name
@@ -107,6 +108,7 @@ class Item:
         self.s_real_custom1 = s_real_custom1
         self.s_real_custom2 = s_real_custom2
         self.s_real_custom3 = s_real_custom3
+        self.mean_excluded = mean_excluded
 
 
 class ItemsList(BaseList):

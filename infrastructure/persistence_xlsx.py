@@ -9,6 +9,9 @@ from domain.constants import DataTableColumns, ParamTableColumns
 from domain.models import InitialDataItem, InitialDataItemList
 from domain.ports import CellRepository
 
+MEAN_EXCLUDED_HEADER = "Не учитывать"
+MEAN_EXCLUDED_ATTR = "mean_excluded"
+
 
 def save_cells_to_xlsx(
     file_name: str,
@@ -67,9 +70,12 @@ def save_cells_to_xlsx(
         _autofit(ws_data)
 
         ws_results = wb.create_sheet(f"Results №{cell_data.cell} {cell_data.name}")
-        ws_results.append(results_headers)
+        ws_results.append(list(results_headers) + [MEAN_EXCLUDED_HEADER])
         for i, param in enumerate(ParamTableColumns):
             ws_results.cell(row=2, column=i + 1, value=getattr(cell_data, param.slug, ""))
+        ws_results.cell(
+            row=2, column=len(results_headers) + 1, value=bool(getattr(cell_data, MEAN_EXCLUDED_ATTR, False))
+        )
         _autofit(ws_results)
 
     if not file_name.endswith(".xlsx"):
@@ -173,6 +179,19 @@ def load_cells_from_xlsx(file_name: str):
             except IndexError:
                 errors.append(f"Ошибка чтения '{result_column.name}' в '{result_name}'")
                 continue
+
+        try:
+            mean_excluded_col = result_column_names.index(MEAN_EXCLUDED_HEADER)
+            result_kwargs[MEAN_EXCLUDED_ATTR] = ws_result[2][mean_excluded_col].value in (
+                True,
+                "TRUE",
+                "True",
+                "true",
+                1,
+                "1",
+            )
+        except (ValueError, IndexError):
+            result_kwargs[MEAN_EXCLUDED_ATTR] = False
 
         items.append(
             dict(

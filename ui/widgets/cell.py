@@ -52,6 +52,11 @@ class CellWidget(QtWidgets.QGroupBox):
         self.checkbox.stateChanged.connect(self.buildGraph)
         layout.addWidget(self.checkbox)
 
+        self.mean_excluded_checkbox = QtWidgets.QCheckBox("Не учитывать")
+        self.mean_excluded_checkbox.setVisible(False)
+        self.mean_excluded_checkbox.stateChanged.connect(self.on_mean_excluded_changed)
+        layout.addWidget(self.mean_excluded_checkbox)
+
         self.setLayout(layout)
 
         self.customContextMenuRequested.connect(self.showContextMenu)
@@ -83,6 +88,7 @@ class CellWidget(QtWidgets.QGroupBox):
             self.rns.setVisible(True)
             self.drift.setVisible(True)
             self.checkbox.setVisible(True)
+            self.mean_excluded_checkbox.setVisible(True)
             self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
 
     def buildGraph(self, state: int):
@@ -98,6 +104,12 @@ class CellWidget(QtWidgets.QGroupBox):
             self.app.remove_plot(self.index)
             if cell_data:
                 cell_data.is_plot = False
+
+    def on_mean_excluded_changed(self, state: int):
+        cell_data = self.app.repo.get(cell=self.index)
+        if cell_data is not None:
+            cell_data.mean_excluded = state == QtCore.Qt.CheckState.Checked.value
+        self.app.calculate_means()
 
     def openRenameDialog(self):
         # Prefill dialog with current name
@@ -198,6 +210,10 @@ class CellWidget(QtWidgets.QGroupBox):
         self.checkbox.setChecked(False)
         del checkbox_blocker
         self.checkbox.setVisible(False)
+        mean_blocker = QtCore.QSignalBlocker(self.mean_excluded_checkbox)
+        self.mean_excluded_checkbox.setChecked(False)
+        del mean_blocker
+        self.mean_excluded_checkbox.setVisible(False)
         self.writeButton.setVisible(True)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
         self.set_dirty(False)
