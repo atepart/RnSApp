@@ -344,6 +344,11 @@ class RnSApp(QtWidgets.QMainWindow):
 
         settings.endGroup()
 
+        settings.beginGroup("DataTable")
+        with contextlib.suppress(Exception):
+            settings.setValue("horizontal_header_state", self.data_table.horizontalHeader().saveState())
+        settings.endGroup()
+
     def restore_settings(self):
         settings = QSettings()
         settings.beginGroup("MainWindow")
@@ -358,6 +363,13 @@ class RnSApp(QtWidgets.QMainWindow):
         if state:
             with contextlib.suppress(Exception):
                 self.dock_manager.restoreState(state)
+        settings.endGroup()
+
+        settings.beginGroup("DataTable")
+        header_state = settings.value("horizontal_header_state")
+        if header_state:
+            with contextlib.suppress(Exception):
+                self.data_table.horizontalHeader().restoreState(header_state)
         settings.endGroup()
 
     def restore_default_layout(self):
