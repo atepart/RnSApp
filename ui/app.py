@@ -167,7 +167,6 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_layout.setContentsMargins(6, 6, 6, 6)
         inputs_layout.setSpacing(6)
 
-        # Two columns: left (Rn/allowed/planned drift), right (S1-3)
         def add_labeled(vbox: QtWidgets.QVBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None):
             lbl = QtWidgets.QLabel(label)
             if tooltip:
@@ -184,16 +183,9 @@ class RnSApp(QtWidgets.QMainWindow):
         left_col.setSpacing(6)
         add_labeled(left_col, "Последовательное R:", self.rn_consistent)
         add_labeled(left_col, "Допустимое отклонение:", self.allowed_error)
-        add_labeled(left_col, "Заложенный уход:", self.planned_drift, planned_hint)
-
-        right_col = QtWidgets.QVBoxLayout()
-        right_col.setSpacing(6)
-        add_labeled(right_col, "Заданная площадь S1 (μm²):", self.s_custom1)
-        add_labeled(right_col, "Заданная площадь S2 (μm²):", self.s_custom2)
-        add_labeled(right_col, "Заданная площадь S3 (μm²):", self.s_custom3)
 
         columns_layout.addLayout(left_col, 1)
-        columns_layout.addLayout(right_col, 1)
+        columns_layout.addStretch(1)
 
         inputs_layout.addLayout(columns_layout)
         inputs_layout.addStretch(1)
@@ -201,6 +193,32 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_container.setLayout(inputs_layout)
         self.inputs_dock = CDockWidget("Действия")
         self.inputs_dock.setWidget(inputs_container)
+
+        area_calc_container = QtWidgets.QWidget(self)
+        area_calc_layout = QtWidgets.QHBoxLayout()
+        area_calc_layout.setContentsMargins(6, 6, 6, 6)
+        area_calc_layout.setSpacing(8)
+
+        def add_inline_labeled(
+            layout: QtWidgets.QHBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None
+        ):
+            lbl = QtWidgets.QLabel(label)
+            if tooltip:
+                lbl.setToolTip(tooltip)
+                widget.setToolTip(tooltip)
+            widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+            layout.addWidget(lbl)
+            layout.addWidget(widget)
+
+        add_inline_labeled(area_calc_layout, "Заложенный уход:", self.planned_drift, planned_hint)
+        add_inline_labeled(area_calc_layout, "Заданная площадь S1 (μm²):", self.s_custom1)
+        add_inline_labeled(area_calc_layout, "Заданная площадь S2 (μm²):", self.s_custom2)
+        add_inline_labeled(area_calc_layout, "Заданная площадь S3 (μm²):", self.s_custom3)
+        area_calc_layout.addStretch(1)
+        area_calc_container.setLayout(area_calc_layout)
+        area_calc_container.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.area_calc_dock = CDockWidget("Расчёт площади")
+        self.area_calc_dock.setWidget(area_calc_container)
 
         calc_container = QtWidgets.QWidget(self)
         calc_layout = QtWidgets.QVBoxLayout()
@@ -227,17 +245,26 @@ class RnSApp(QtWidgets.QMainWindow):
 
         left_area = self.dock_manager.addDockWidget(DockWidgetArea.LeftDockWidgetArea, self.data_dock)
         self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.inputs_dock, left_area)
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.area_calc_dock, left_area)
         self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.calc_dock, left_area)
 
         right_area = self.dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, self.plot_dock)
         self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.cells_dock, right_area)
 
-        for dock in (self.data_dock, self.inputs_dock, self.calc_dock, self.plot_dock, self.cells_dock):
+        self.dock_widgets = (
+            self.data_dock,
+            self.inputs_dock,
+            self.area_calc_dock,
+            self.calc_dock,
+            self.plot_dock,
+            self.cells_dock,
+        )
+        for dock in self.dock_widgets:
             try:
                 feats = dock.features()
-                feats &= ~CDockWidget.DockWidgetFeature.DockWidgetClosable
+                feats |= CDockWidget.DockWidgetFeature.DockWidgetClosable
                 feats &= ~CDockWidget.DockWidgetFeature.DockWidgetFloatable
-                feats |= CDockWidget.DockWidgetFeature.DockWidgetPinnable
+                feats &= ~CDockWidget.DockWidgetFeature.DockWidgetPinnable
                 dock.setFeatures(feats)
             except Exception:
                 pass
@@ -253,6 +280,13 @@ class RnSApp(QtWidgets.QMainWindow):
         act_restore.setToolTip("Построить расположение панелей по умолчанию")
         act_restore.triggered.connect(self.restore_default_layout)
         toolbar.addAction(act_restore)
+        self.dock_widgets_menu = QtWidgets.QMenu("Виджеты", self)
+        self.dock_widgets_menu.aboutToShow.connect(self._refresh_dock_widgets_menu)
+        dock_widgets_button = QtWidgets.QToolButton(self)
+        dock_widgets_button.setText("Виджеты")
+        dock_widgets_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        dock_widgets_button.setMenu(self.dock_widgets_menu)
+        toolbar.addWidget(dock_widgets_button)
         act_create_template = QAction("Создать шаблон", self)
         act_create_template.setToolTip("Сохранить шаблон с именами, диаметрами и площадями")
         act_create_template.triggered.connect(self.create_template)
@@ -286,19 +320,42 @@ class RnSApp(QtWidgets.QMainWindow):
         # Restore persisted layout and geometry if available
         with contextlib.suppress(Exception):
             self.restore_settings()
-        # Always ensure all docks are visible on startup
         with contextlib.suppress(Exception):
-            for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
-                dock.setVisible(True)
-                dock.show()
+            self._clear_legacy_auto_hide_state()
 
     @staticmethod
     def _configure_dock_manager_features() -> None:
         with contextlib.suppress(Exception):
-            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideFeatureEnabled, True)
-            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.DockAreaHasAutoHideButton, True)
-            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideButtonTogglesArea, True)
-            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideCloseButtonCollapsesDock, True)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideFeatureEnabled, False)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.DockAreaHasAutoHideButton, False)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideButtonTogglesArea, False)
+
+    def _refresh_dock_widgets_menu(self) -> None:
+        self.dock_widgets_menu.clear()
+        for dock in self.dock_widgets:
+            action = self.dock_widgets_menu.addAction(dock.windowTitle())
+            action.setCheckable(True)
+            action.setChecked(not dock.isClosed())
+            action.setToolTip("Отмечено = показан")
+            action.triggered.connect(lambda checked, current_dock=dock: self._set_dock_visible(current_dock, checked))
+
+    def _set_dock_visible(self, dock: CDockWidget, visible: bool) -> None:
+        with contextlib.suppress(Exception):
+            dock.toggleView(visible)
+        with contextlib.suppress(Exception):
+            self.save_settings()
+
+    def _clear_legacy_auto_hide_state(self) -> None:
+        has_auto_hide = False
+        for dock in self.dock_widgets:
+            with contextlib.suppress(Exception):
+                if dock.isAutoHide():
+                    has_auto_hide = True
+                    break
+        if has_auto_hide and getattr(self, "default_dock_state", None):
+            with contextlib.suppress(Exception):
+                self.dock_manager.restoreState(self.default_dock_state)
+                self.save_settings()
 
     # ----- Settings helpers for file dialogs -----
     def _get_initial_directory(self) -> str:
@@ -379,9 +436,9 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.dock_manager.restoreState(self.default_dock_state)
         # Ensure all docks are visible
         with contextlib.suppress(Exception):
-            for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
-                dock.setVisible(True)
-                dock.show()
+            for dock in self.dock_widgets:
+                if dock.isClosed():
+                    dock.toggleView(True)
         # Persist current layout as the new state
         with contextlib.suppress(Exception):
             self.save_settings()
