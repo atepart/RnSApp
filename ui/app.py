@@ -148,8 +148,7 @@ class RnSApp(QtWidgets.QMainWindow):
         self.cell_v_layout.addLayout(self.cell_h_layout)
         self.cell_group.setLayout(self.cell_v_layout)
 
-        with contextlib.suppress(Exception):
-            CDockManager.setConfigFlag(CDockManager.DockManagerFlag.AutoHideFeatureEnabled, True)
+        self._configure_dock_manager_features()
 
         self.dock_manager = CDockManager(self)
 
@@ -238,6 +237,7 @@ class RnSApp(QtWidgets.QMainWindow):
                 feats = dock.features()
                 feats &= ~CDockWidget.DockWidgetFeature.DockWidgetClosable
                 feats &= ~CDockWidget.DockWidgetFeature.DockWidgetFloatable
+                feats |= CDockWidget.DockWidgetFeature.DockWidgetPinnable
                 dock.setFeatures(feats)
             except Exception:
                 pass
@@ -291,6 +291,14 @@ class RnSApp(QtWidgets.QMainWindow):
             for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
                 dock.setVisible(True)
                 dock.show()
+
+    @staticmethod
+    def _configure_dock_manager_features() -> None:
+        with contextlib.suppress(Exception):
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideFeatureEnabled, True)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.DockAreaHasAutoHideButton, True)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideButtonTogglesArea, True)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideCloseButtonCollapsesDock, True)
 
     # ----- Settings helpers for file dialogs -----
     def _get_initial_directory(self) -> str:
