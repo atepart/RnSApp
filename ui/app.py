@@ -36,7 +36,7 @@ class RnSApp(QtWidgets.QMainWindow):
 
         self.setWindowIcon(QIcon("./assets/rns-logo-alt.ico"))
         # Табличка с данными без заголовка-лейбла
-        self.data_table = DataTable(rows=50)
+        self.data_table = DataTable(rows=80)
 
         self.plot = pg.PlotWidget()
 
