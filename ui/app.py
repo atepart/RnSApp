@@ -45,7 +45,8 @@ class RnSApp(QtWidgets.QMainWindow):
 
         # Контейнер действий без рамки группы
         self.actions_group = QtWidgets.QWidget()
-        self.actions_layout = QtWidgets.QGridLayout()
+        self.actions_layout = QtWidgets.QHBoxLayout()
+        self.actions_layout.setContentsMargins(0, 0, 0, 0)
         self.actions_layout.setSpacing(6)
 
         self.result_button = QtWidgets.QPushButton("Рассчитать")
@@ -64,16 +65,25 @@ class RnSApp(QtWidgets.QMainWindow):
         self.open_template_button.setToolTip("Загрузить шаблон данных (имена, диаметры, площади)")
         self.open_template_button.clicked.connect(self.open_template)
 
-        # Make buttons expand to fill the bottom row
-        for btn in (self.result_button, self.clean_rn_button, self.clean_all_button, self.open_template_button):
-            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.btn_load_cell_data = QtWidgets.QPushButton("Открыть файл")
+        self.btn_load_cell_data.setToolTip("Открыть данные из xlsx файла")
+        self.btn_load_cell_data.clicked.connect(self.load_cell_data)
 
-        self.actions_layout.addWidget(self.result_button, 0, 0)
-        self.actions_layout.addWidget(self.clean_rn_button, 0, 1)
-        self.actions_layout.addWidget(self.clean_all_button, 0, 2)
-        self.actions_layout.addWidget(self.open_template_button, 0, 3)
-        for col in range(4):
-            self.actions_layout.setColumnStretch(col, 1)
+        self.cell_save_button = QtWidgets.QPushButton("Сохранить")
+        self.cell_save_button.setToolTip("Сохранить записанные данные с RnS")
+        self.cell_save_button.clicked.connect(self.save_cell_data)
+
+        action_buttons = (
+            self.result_button,
+            self.clean_rn_button,
+            self.clean_all_button,
+            self.open_template_button,
+            self.btn_load_cell_data,
+            self.cell_save_button,
+        )
+        for btn in action_buttons:
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            self.actions_layout.addWidget(btn)
         self.actions_group.setLayout(self.actions_layout)
 
         # Поля параметров ввода как аккуратные лейблы + спинбоксы
@@ -130,18 +140,9 @@ class RnSApp(QtWidgets.QMainWindow):
         self.mean_drift = QtWidgets.QLabel("Средний уход: --", self)
         self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
 
-        self.btn_load_cell_data = QtWidgets.QPushButton("Открыть")
-        self.btn_load_cell_data.setToolTip("Открыть данные из xlsx файла")
-        self.btn_load_cell_data.clicked.connect(self.load_cell_data)
-
-        self.cell_save_button = QtWidgets.QPushButton("Сохранить")
-        self.cell_save_button.setToolTip("Сохранить записанные данные с RnS")
-        self.cell_save_button.clicked.connect(self.save_cell_data)
-
         self.cell_h_layout.addWidget(self.mean_drift)
         self.cell_h_layout.addWidget(self.mean_rns)
-        self.cell_h_layout.addWidget(self.btn_load_cell_data)
-        self.cell_h_layout.addWidget(self.cell_save_button)
+        self.cell_h_layout.addStretch(1)
 
         self.cell_v_layout.addLayout(self.cell_grid_layout)
         self.cell_v_layout.addLayout(self.cell_h_layout)
