@@ -29,9 +29,10 @@ from domain.utils import (
 )
 
 
-def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
+def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, ...]]):
     """Export the 4x4 grid of cell summary to the first sheet (visual aid)."""
     init_data = list(cell_grid_values)
+    row_group_size = max((len(item) for item in init_data), default=3)
     output = []
     blocks = [init_data[i : i + 4] for i in range(0, len(init_data), 4)]
     for block in blocks:
@@ -51,6 +52,7 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             # Values like "Уход: 0.123" or "RnS: 55.3" -> take right part
             if ":" in s:
                 s = s.split(":", 1)[1].strip()
+            s = s.removesuffix("%").strip()
             s = s.replace(",", ".")
             # pure number?
             if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
@@ -62,8 +64,7 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
 
     for row_ind, row in enumerate(output, 1):
         for col_ind, coll in enumerate(row, 1):
-            # Header row every 3rd (names) stays text; others (drift, RnS) try numeric
-            is_header = (row_ind - 1) % 3 == 0
+            is_header = (row_ind - 1) % row_group_size == 0
             value = coll
             if not is_header:
                 num = _maybe_numeric(coll)
@@ -73,12 +74,12 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             # format floats to 3 decimals
             if not is_header and isinstance(value, float):
                 cell.number_format = "0.000"
-            if (row_ind - 1) % 3 == 0:
+            if is_header:
                 cell.border = Border(
                     right=Side(style="thick"), left=Side(style="thick"), top=Side("thick"), bottom=Side(style="thick")
                 )
                 cell.font = Font(bold=True)
-            elif (row_ind - 3) % 3 == 0:
+            elif row_ind % row_group_size == 0:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"), bottom=Side(style="thick"))
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
@@ -153,7 +154,7 @@ def _compose_cell_sheet_title(cell_index: int, name: str, existing: List[str]) -
 class XlsxCellIO(CellDataIO):
     """XLSX adapter implementing combined per-cell sheet with data+results and a chart."""
 
-    def save(self, file_name: str, cell_grid_values: List[Tuple[str, str, str]], repo: CellRepository) -> None:
+    def save(self, file_name: str, cell_grid_values: List[Tuple[str, ...]], repo: CellRepository) -> None:
         wb = openpyxl.Workbook()
         ws_cells = wb.active
         ws_cells.title = "Cells data"

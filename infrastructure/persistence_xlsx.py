@@ -15,7 +15,7 @@ MEAN_EXCLUDED_ATTR = "mean_excluded"
 
 def save_cells_to_xlsx(
     file_name: str,
-    cell_grid_values: List[Tuple[str, str, str]],
+    cell_grid_values: List[Tuple[str, ...]],
     repo: CellRepository,
     data_headers,
     results_headers,
@@ -37,6 +37,7 @@ def save_cells_to_xlsx(
     ws_cells.title = "Cells data"
 
     init_data = list(cell_grid_values)
+    row_group_size = max((len(item) for item in init_data), default=3)
     output = []
 
     blocks = [init_data[i : i + 4] for i in range(0, len(init_data), 4)]
@@ -48,12 +49,12 @@ def save_cells_to_xlsx(
         for col_ind, coll in enumerate(row, 1):
             cell = ws_cells.cell(row=row_ind, column=col_ind, value=coll)
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            if (row_ind - 1) % 3 == 0:
+            if (row_ind - 1) % row_group_size == 0:
                 cell.border = Border(
                     right=Side(style="thick"), left=Side(style="thick"), top=Side("thick"), bottom=Side(style="thick")
                 )
                 cell.font = Font(bold=True)
-            elif (row_ind - 3) % 3 == 0:
+            elif row_ind % row_group_size == 0:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"), bottom=Side(style="thick"))
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))

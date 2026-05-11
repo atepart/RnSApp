@@ -794,7 +794,9 @@ class RnSApp(QtWidgets.QMainWindow):
         if not file_name:
             return
         self._remember_path(file_name)
-        init_data = [(cell.name.text(), cell.drift.text(), cell.rns.text()) for cell in self.cell_widgets]
+        init_data = [
+            (cell.name.text(), cell.drift.text(), cell.rns.text(), cell.rns_error.text()) for cell in self.cell_widgets
+        ]
         self.excel_io.save(
             file_name=file_name,
             cell_grid_values=init_data,
@@ -974,8 +976,11 @@ class RnSApp(QtWidgets.QMainWindow):
                     first_cell = cell_item.cell
                 cell_widget = self.cell_widgets[cell_item.cell - 1]
                 cell_widget.name.setText(cell_item.name)
-                cell_widget.drift.setText(f"Уход: {round(cell_item.drift, 3)}")
-                cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
+                cell_widget.set_summary(
+                    drift=cell_item.drift,
+                    rns=cell_item.rns,
+                    rns_error=getattr(cell_item, "rns_error", 0),
+                )
                 cell_widget.updateUI()
                 blocker = QtCore.QSignalBlocker(cell_widget.mean_excluded_checkbox)
                 cell_widget.mean_excluded_checkbox.setChecked(bool(getattr(cell_item, "mean_excluded", False)))
