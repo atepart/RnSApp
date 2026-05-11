@@ -22,8 +22,8 @@ from domain.utils import (
     calculate_real_custom_area,
     calculate_rn_sqrt,
     calculate_rns,
+    calculate_rns_over_rn,
     calculate_rns_per_sample,
-    calculate_square,
     drop_nans,
     linear_fit,
 )
@@ -415,7 +415,7 @@ class XlsxCellIO(CellDataIO):
             )
             s_real_c3_cell.number_format = "0.000"
 
-            # Per-row formulas for derived values (Rn^-0.5, RnS, площадь, ошибка RnS)
+            # Per-row formulas for derived values (Rn^-0.5, RnS/Rn, RnS, ошибка RnS)
             for r in range(2, data_max_row + 1):
                 if not _row_has_selected_data(r):
                     continue
@@ -437,14 +437,14 @@ class XlsxCellIO(CellDataIO):
                     cell.value = formula
                     cell.number_format = "0.000"
 
-                if square_col_idx and diameter_col_idx:
-                    diam_ref = data_ref(DataTableColumns.DIAMETER, r)
-                    base = f"({diam_ref}-{drift_ref})^2*PI()/4"
+                if square_col_idx and resistance_col_idx:
+                    res_ref = data_ref(DataTableColumns.RESISTANCE, r)
+                    base = f"{rns_res_ref}/{res_ref}"
                     core = f'IFERROR({base},"")'
                     if select_ref:
                         formula = f'=IF({select_ref},{core},"")'
                     else:
-                        formula = f'=IF(OR(ISBLANK({diam_ref}),ISBLANK({drift_ref})),"",{core})'
+                        formula = f'=IF(OR(ISBLANK({res_ref}),ISBLANK({rns_res_ref}),{res_ref}=0),"",{core})'
                     cell = ws.cell(row=r, column=square_col_idx)
                     cell.value = formula
                     cell.number_format = "0.000"
@@ -783,7 +783,7 @@ class XlsxCellIO(CellDataIO):
                 if rd.get("diameter") is None or rd.get("resistance") is None:
                     continue
                 with contextlib.suppress(Exception):
-                    rd["square"] = calculate_square(diameter=float(rd["diameter"]), drift=float(drift))
+                    rd["square"] = calculate_rns_over_rn(rns=float(rns), resistance=float(rd["resistance"]))
                 with contextlib.suppress(Exception):
                     rns_val = calculate_rns_per_sample(
                         resistance=float(rd["resistance"]),

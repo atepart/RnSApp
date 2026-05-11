@@ -102,11 +102,18 @@ def load_cells_from_xlsx(file_name: str):
 
         initial_data = InitialDataItemList()
         column_names = [ws_data[1][col].value for col in range(0, ws_data.max_column)]
+        data_header_aliases = {
+            DataTableColumns.SQUARE: ["Площадь (μm²)"],
+        }
         for data_column in DataTableColumns:
             col = None
-            try:
-                col = column_names.index(data_column.slug)
-            except (ValueError,):
+            for name in [data_column.slug] + data_header_aliases.get(data_column, []):
+                try:
+                    col = column_names.index(name)
+                    break
+                except (ValueError,):
+                    continue
+            if col is None:
                 errors.append(f"Колонка '{data_column.slug}' не найдена в таблице '{data_name}'")
 
             for row in range(2, ws_data.max_row + 1):

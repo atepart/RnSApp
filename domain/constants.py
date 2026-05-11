@@ -56,7 +56,7 @@ class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     RNS = ("RnS", float, "RnS")
     RNS_ERROR = ("Ошибка RnS", float, "Ошибка RnS")
     DRIFT = ("Суммарный Уход (μm)", float, "Суммарный Уход (μm)")
-    SQUARE = ("Площадь (μm²)", float, "Площадь (μm²)")
+    SQUARE = ("RnS/Rn", float, "RnS/Rn")
     RN_SQRT = ("1/√Rₙ", float, "1/√Rₙ")
 
 
