@@ -58,6 +58,7 @@ class DataTableColumns(TableColumns, metaclass=TableColumnsMeta):
     DRIFT = ("Суммарный Уход (μm)", float, "Суммарный Уход (μm)")
     SQUARE = ("RnS/Rn", float, "RnS/Rn")
     RN_SQRT = ("1/√Rₙ", float, "1/√Rₙ")
+    SAMPLE_AREA = ("Площадь ACAD (μm²)", float, "Площадь ACAD (μm²)")
 
 
 class ParamTableColumns(TableColumns, metaclass=TableColumnsMeta):

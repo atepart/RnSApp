@@ -11,6 +11,8 @@ from domain.ports import CellRepository
 
 MEAN_EXCLUDED_HEADER = "Не учитывать"
 MEAN_EXCLUDED_ATTR = "mean_excluded"
+SAMPLE_SIZE_INPUT_MODE_HEADER = "Режим ввода размера"
+SAMPLE_SIZE_INPUT_MODE_ATTR = "sample_size_input_mode"
 
 
 def save_cells_to_xlsx(
@@ -71,11 +73,16 @@ def save_cells_to_xlsx(
         _autofit(ws_data)
 
         ws_results = wb.create_sheet(f"Results №{cell_data.cell} {cell_data.name}")
-        ws_results.append(list(results_headers) + [MEAN_EXCLUDED_HEADER])
+        ws_results.append(list(results_headers) + [MEAN_EXCLUDED_HEADER, SAMPLE_SIZE_INPUT_MODE_HEADER])
         for i, param in enumerate(ParamTableColumns):
             ws_results.cell(row=2, column=i + 1, value=getattr(cell_data, param.slug, ""))
         ws_results.cell(
             row=2, column=len(results_headers) + 1, value=bool(getattr(cell_data, MEAN_EXCLUDED_ATTR, False))
+        )
+        ws_results.cell(
+            row=2,
+            column=len(results_headers) + 2,
+            value=getattr(cell_data, SAMPLE_SIZE_INPUT_MODE_ATTR, "diameter") or "diameter",
         )
         _autofit(ws_results)
 
@@ -112,6 +119,7 @@ def load_cells_from_xlsx(file_name: str):
         data_header_aliases = {
             DataTableColumns.SQUARE: ["Площадь (μm²)"],
         }
+        optional_data_columns = {DataTableColumns.SAMPLE_AREA}
         for data_column in DataTableColumns:
             col = None
             for name in [data_column.slug] + data_header_aliases.get(data_column, []):
@@ -121,7 +129,8 @@ def load_cells_from_xlsx(file_name: str):
                 except (ValueError,):
                     continue
             if col is None:
-                errors.append(f"Колонка '{data_column.slug}' не найдена в таблице '{data_name}'")
+                if data_column not in optional_data_columns:
+                    errors.append(f"Колонка '{data_column.slug}' не найдена в таблице '{data_name}'")
 
             for row in range(2, ws_data.max_row + 1):
                 try:
@@ -193,6 +202,13 @@ def load_cells_from_xlsx(file_name: str):
             )
         except (ValueError, IndexError):
             result_kwargs[MEAN_EXCLUDED_ATTR] = False
+
+        try:
+            mode_col = result_column_names.index(SAMPLE_SIZE_INPUT_MODE_HEADER)
+            mode = ws_result[2][mode_col].value
+            result_kwargs[SAMPLE_SIZE_INPUT_MODE_ATTR] = mode if mode in ("diameter", "area") else "diameter"
+        except (ValueError, IndexError):
+            result_kwargs[SAMPLE_SIZE_INPUT_MODE_ATTR] = "diameter"
 
         items.append(
             dict(

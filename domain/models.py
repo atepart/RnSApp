@@ -82,6 +82,7 @@ class Item:
         s_real_custom2: float = 0,
         s_real_custom3: float = 0,
         mean_excluded: bool = False,
+        sample_size_input_mode: str = "diameter",
     ) -> None:
         self.cell = cell
         self.name = name
@@ -109,6 +110,7 @@ class Item:
         self.s_real_custom2 = s_real_custom2
         self.s_real_custom3 = s_real_custom3
         self.mean_excluded = mean_excluded
+        self.sample_size_input_mode = sample_size_input_mode
 
 
 class ItemsList(BaseList):

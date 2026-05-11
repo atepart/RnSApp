@@ -287,6 +287,16 @@ class RnSApp(QtWidgets.QMainWindow):
         dock_widgets_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
         dock_widgets_button.setMenu(self.dock_widgets_menu)
         toolbar.addWidget(dock_widgets_button)
+        self.sample_size_mode_button = QtWidgets.QToolButton(self)
+        self.sample_size_mode_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.sample_size_mode_menu = QtWidgets.QMenu(self.sample_size_mode_button)
+        act_diameter_mode = self.sample_size_mode_menu.addAction("Диаметр")
+        act_diameter_mode.triggered.connect(lambda: self.set_sample_size_input_mode("diameter"))
+        act_area_mode = self.sample_size_mode_menu.addAction("Площадь")
+        act_area_mode.triggered.connect(lambda: self.set_sample_size_input_mode("area"))
+        self.sample_size_mode_button.setMenu(self.sample_size_mode_menu)
+        toolbar.addWidget(self.sample_size_mode_button)
+        self.set_sample_size_input_mode(getattr(self.data_table, "sample_size_input_mode", "diameter"), save=False)
         act_create_template = QAction("Создать шаблон", self)
         act_create_template.setToolTip("Сохранить шаблон с именами, диаметрами и площадями")
         act_create_template.triggered.connect(self.create_template)
@@ -322,6 +332,16 @@ class RnSApp(QtWidgets.QMainWindow):
             self.restore_settings()
         with contextlib.suppress(Exception):
             self._clear_legacy_auto_hide_state()
+
+    def set_sample_size_input_mode(self, mode: str, save: bool = True) -> None:
+        mode = mode if mode in ("diameter", "area") else "diameter"
+        self.data_table.set_sample_size_input_mode(mode)
+        label = "Диаметр" if mode == "diameter" else "Площадь"
+        self.sample_size_mode_button.setText(f"Ввод: {label}")
+        self.sample_size_mode_button.setToolTip("Выбор столбца ввода размера образцов")
+        if save:
+            with contextlib.suppress(Exception):
+                self.save_settings()
 
     @staticmethod
     def _configure_dock_manager_features() -> None:
@@ -404,6 +424,7 @@ class RnSApp(QtWidgets.QMainWindow):
         settings.beginGroup("DataTable")
         with contextlib.suppress(Exception):
             settings.setValue("horizontal_header_state", self.data_table.horizontalHeader().saveState())
+            settings.setValue("sample_size_input_mode", getattr(self.data_table, "sample_size_input_mode", "diameter"))
         settings.endGroup()
 
     def restore_settings(self):
@@ -427,6 +448,9 @@ class RnSApp(QtWidgets.QMainWindow):
         if header_state:
             with contextlib.suppress(Exception):
                 self.data_table.horizontalHeader().restoreState(header_state)
+        mode = settings.value("sample_size_input_mode", "diameter", type=str)
+        with contextlib.suppress(Exception):
+            self.set_sample_size_input_mode(mode, save=False)
         settings.endGroup()
 
     def restore_default_layout(self):
@@ -640,6 +664,7 @@ class RnSApp(QtWidgets.QMainWindow):
         return self.calc.calculate_rns_drift_square_per_sample()
 
     def calculate_results(self):
+        self.data_table.sync_sample_size_columns()
         # Uncheck rows where Rn (Ω) is empty before calculations
         self.data_table.uncheck_rows_with_empty_rn()
         if not self.calc.calculate_results():
@@ -676,6 +701,7 @@ class RnSApp(QtWidgets.QMainWindow):
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
             s_real_custom3=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM3),
             mean_excluded=self.cell_widgets[cell - 1].mean_excluded_checkbox.isChecked(),
+            sample_size_input_mode=getattr(self.data_table, "sample_size_input_mode", "diameter"),
         )
         self.set_active_cell(cell)
         # After saving, clear dirty indicator for this cell
@@ -794,6 +820,7 @@ class RnSApp(QtWidgets.QMainWindow):
         if not file_name:
             return
         self._remember_path(file_name)
+        self.data_table.sync_sample_size_columns()
         init_data = [
             (cell.name.text(), cell.drift.text(), cell.rns.text(), cell.rns_error.text()) for cell in self.cell_widgets
         ]
@@ -815,6 +842,7 @@ class RnSApp(QtWidgets.QMainWindow):
             return
         if not file_name.endswith(".xlsx"):
             file_name += ".xlsx"
+        self.data_table.sync_sample_size_columns()
 
         rows: list[dict] = []
         for row in range(self.data_table.rowCount()):
@@ -831,15 +859,21 @@ class RnSApp(QtWidgets.QMainWindow):
             if diam_item and diam_item.text():
                 with contextlib.suppress(Exception):
                     diam_val = float(str(diam_item.text()).replace(",", "."))
+            area_item = self.data_table.item(row, DataTableColumns.SAMPLE_AREA.index)
+            area_val = None
+            if area_item and area_item.text():
+                with contextlib.suppress(Exception):
+                    area_val = float(str(area_item.text()).replace(",", "."))
             cb = self.data_table.get_row_checkbox(row)
             selected = bool(cb.isChecked()) if cb else False
-            if any([name_val, selected, diam_val not in (None, "")]):
+            if any([name_val, selected, diam_val not in (None, ""), area_val not in (None, "")]):
                 rows.append(
                     {
                         "number": number_val if number_val not in (None, "") else row + 1,
                         "name": name_val,
                         "selected": selected,
                         "diameter": diam_val,
+                        "sample_area": area_val,
                     }
                 )
 
@@ -852,6 +886,7 @@ class RnSApp(QtWidgets.QMainWindow):
             "s_custom2": float(self.s_custom2.value()) if self.s_custom2 is not None else None,
             "s_custom3": float(self.s_custom3.value()) if self.s_custom3 is not None else None,
             "planned_drift": float(self.planned_drift.value()) if self.planned_drift is not None else None,
+            "sample_size_input_mode": getattr(self.data_table, "sample_size_input_mode", "diameter"),
         }
 
         try:
@@ -888,6 +923,8 @@ class RnSApp(QtWidgets.QMainWindow):
         self.clean_all()
         self.data_table.load_data(initial_data)
         with contextlib.suppress(Exception):
+            self.set_sample_size_input_mode(areas.get("sample_size_input_mode") or "diameter")
+        with contextlib.suppress(Exception):
             if areas.get("s_custom1") is not None:
                 self.s_custom1.setValue(float(areas["s_custom1"]))
             if areas.get("s_custom2") is not None:
@@ -907,6 +944,8 @@ class RnSApp(QtWidgets.QMainWindow):
         if not cell_data:
             return
         self.data_table.load_data(data=cell_data.initial_data)
+        with contextlib.suppress(Exception):
+            self.set_sample_size_input_mode(getattr(cell_data, "sample_size_input_mode", "diameter"))
         self.param_table.load_data(data=cell_data)
         self.plot_current_data()
         self.set_active_cell(cell)
