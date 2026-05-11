@@ -22,16 +22,17 @@ from domain.utils import (
     calculate_real_custom_area,
     calculate_rn_sqrt,
     calculate_rns,
+    calculate_rns_over_rn,
     calculate_rns_per_sample,
-    calculate_square,
     drop_nans,
     linear_fit,
 )
 
 
-def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
+def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, ...]]):
     """Export the 4x4 grid of cell summary to the first sheet (visual aid)."""
     init_data = list(cell_grid_values)
+    row_group_size = max((len(item) for item in init_data), default=3)
     output = []
     blocks = [init_data[i : i + 4] for i in range(0, len(init_data), 4)]
     for block in blocks:
@@ -51,6 +52,7 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             # Values like "Уход: 0.123" or "RnS: 55.3" -> take right part
             if ":" in s:
                 s = s.split(":", 1)[1].strip()
+            s = s.removesuffix("%").strip()
             s = s.replace(",", ".")
             # pure number?
             if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
@@ -62,8 +64,7 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
 
     for row_ind, row in enumerate(output, 1):
         for col_ind, coll in enumerate(row, 1):
-            # Header row every 3rd (names) stays text; others (drift, RnS) try numeric
-            is_header = (row_ind - 1) % 3 == 0
+            is_header = (row_ind - 1) % row_group_size == 0
             value = coll
             if not is_header:
                 num = _maybe_numeric(coll)
@@ -73,12 +74,12 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, str, str]]):
             # format floats to 3 decimals
             if not is_header and isinstance(value, float):
                 cell.number_format = "0.000"
-            if (row_ind - 1) % 3 == 0:
+            if is_header:
                 cell.border = Border(
                     right=Side(style="thick"), left=Side(style="thick"), top=Side("thick"), bottom=Side(style="thick")
                 )
                 cell.font = Font(bold=True)
-            elif (row_ind - 3) % 3 == 0:
+            elif row_ind % row_group_size == 0:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"), bottom=Side(style="thick"))
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
@@ -112,6 +113,10 @@ _SANITIZE_MAP = {
     "]": "］",  # FULLWIDTH RIGHT SQUARE BRACKET
 }
 _DESANITIZE_MAP = {v: k for k, v in _SANITIZE_MAP.items()}
+MEAN_EXCLUDED_HEADER = "Не учитывать"
+MEAN_EXCLUDED_ATTR = "mean_excluded"
+SAMPLE_SIZE_INPUT_MODE_HEADER = "Режим ввода размера"
+SAMPLE_SIZE_INPUT_MODE_ATTR = "sample_size_input_mode"
 
 
 def _sanitize_title_component(text: str) -> str:
@@ -151,7 +156,7 @@ def _compose_cell_sheet_title(cell_index: int, name: str, existing: List[str]) -
 class XlsxCellIO(CellDataIO):
     """XLSX adapter implementing combined per-cell sheet with data+results and a chart."""
 
-    def save(self, file_name: str, cell_grid_values: List[Tuple[str, str, str]], repo: CellRepository) -> None:
+    def save(self, file_name: str, cell_grid_values: List[Tuple[str, ...]], repo: CellRepository) -> None:
         wb = openpyxl.Workbook()
         ws_cells = wb.active
         ws_cells.title = "Cells data"
@@ -262,6 +267,29 @@ class XlsxCellIO(CellDataIO):
                 if param.dtype is float and value not in (None, ""):
                     vcell.number_format = "0.000"
 
+            mean_excluded_col = results_start_col + len(results_params)
+            hcell = ws.cell(row=1, column=mean_excluded_col, value=MEAN_EXCLUDED_HEADER)
+            hcell.font = Font(bold=True)
+            hcell.border = Border(bottom=Side(style="medium"))
+            hcell.alignment = Alignment(horizontal="center", vertical="center")
+            vcell = ws.cell(
+                row=2,
+                column=mean_excluded_col,
+                value=bool(getattr(cell_data, MEAN_EXCLUDED_ATTR, False)),
+            )
+            vcell.alignment = Alignment(horizontal="center", vertical="center")
+            mode_col = mean_excluded_col + 1
+            hcell = ws.cell(row=1, column=mode_col, value=SAMPLE_SIZE_INPUT_MODE_HEADER)
+            hcell.font = Font(bold=True)
+            hcell.border = Border(bottom=Side(style="medium"))
+            hcell.alignment = Alignment(horizontal="center", vertical="center")
+            vcell = ws.cell(
+                row=2,
+                column=mode_col,
+                value=getattr(cell_data, SAMPLE_SIZE_INPUT_MODE_ATTR, "diameter") or "diameter",
+            )
+            vcell.alignment = Alignment(horizontal="center", vertical="center")
+
             # Autofit widths for data and results columns based on content
             def _autofit(col_idx: int, extra: int = 2, min_width: int = 10):
                 try:
@@ -279,6 +307,8 @@ class XlsxCellIO(CellDataIO):
                 _autofit(col_idx)
             for i, _ in enumerate(results_params, start=0):
                 _autofit(results_start_col + i)
+            _autofit(mean_excluded_col)
+            _autofit(mode_col)
 
             # Column mapping for clarity (Excel letters)
             results_row = 2
@@ -310,6 +340,7 @@ class XlsxCellIO(CellDataIO):
             rns_col_idx = data_col_idx.get(DataTableColumns.RNS)
             rns_error_col_idx = data_col_idx.get(DataTableColumns.RNS_ERROR)
             square_col_idx = data_col_idx.get(DataTableColumns.SQUARE)
+            sample_area_col_idx = data_col_idx.get(DataTableColumns.SAMPLE_AREA)
 
             def _row_has_selected_data(row: int) -> bool:
                 if diameter_col_idx is None or resistance_col_idx is None:
@@ -415,7 +446,7 @@ class XlsxCellIO(CellDataIO):
             )
             s_real_c3_cell.number_format = "0.000"
 
-            # Per-row formulas for derived values (Rn^-0.5, RnS, площадь, ошибка RnS)
+            # Per-row formulas for derived values (Rn^-0.5, RnS/Rn, RnS, ошибка RnS)
             for r in range(2, data_max_row + 1):
                 if not _row_has_selected_data(r):
                     continue
@@ -437,15 +468,27 @@ class XlsxCellIO(CellDataIO):
                     cell.value = formula
                     cell.number_format = "0.000"
 
-                if square_col_idx and diameter_col_idx:
-                    diam_ref = data_ref(DataTableColumns.DIAMETER, r)
-                    base = f"({diam_ref}-{drift_ref})^2*PI()/4"
+                if square_col_idx and resistance_col_idx:
+                    res_ref = data_ref(DataTableColumns.RESISTANCE, r)
+                    base = f"{rns_res_ref}/{res_ref}"
                     core = f'IFERROR({base},"")'
                     if select_ref:
                         formula = f'=IF({select_ref},{core},"")'
                     else:
-                        formula = f'=IF(OR(ISBLANK({diam_ref}),ISBLANK({drift_ref})),"",{core})'
+                        formula = f'=IF(OR(ISBLANK({res_ref}),ISBLANK({rns_res_ref}),{res_ref}=0),"",{core})'
                     cell = ws.cell(row=r, column=square_col_idx)
+                    cell.value = formula
+                    cell.number_format = "0.000"
+
+                if sample_area_col_idx and diameter_col_idx:
+                    diam_ref = data_ref(DataTableColumns.DIAMETER, r)
+                    base = f"{diam_ref}^2*PI()/4"
+                    core = f'IFERROR({base},"")'
+                    if select_ref:
+                        formula = f'=IF({select_ref},{core},"")'
+                    else:
+                        formula = f'=IF(ISBLANK({diam_ref}),"",{core})'
+                    cell = ws.cell(row=r, column=sample_area_col_idx)
                     cell.value = formula
                     cell.number_format = "0.000"
 
@@ -691,16 +734,17 @@ class XlsxCellIO(CellDataIO):
                 return last
 
             diameter_col = first_col_for(DataTableColumns.DIAMETER.slug)
+            sample_area_col = first_col_for(DataTableColumns.SAMPLE_AREA.slug)
             resistance_col = first_col_for(DataTableColumns.RESISTANCE.slug)
             select_col = first_col_for(DataTableColumns.SELECT.slug)
             name_col = first_col_for(DataTableColumns.NAME.slug)
             number_col = first_col_for(DataTableColumns.NUMBER.slug)
 
-            if diameter_col is None or resistance_col is None:
+            if (diameter_col is None and sample_area_col is None) or resistance_col is None:
                 errors.append(f"Колонки с исходными данными не найдены в листе {sheet_name}")
                 continue
 
-            candidate_cols = [c for c in (diameter_col, resistance_col, name_col, number_col) if c]
+            candidate_cols = [c for c in (diameter_col, sample_area_col, resistance_col, name_col, number_col) if c]
             max_data_row = 2
             for c in candidate_cols:
                 max_data_row = max(max_data_row, last_non_empty_row_for_col(c))
@@ -716,6 +760,10 @@ class XlsxCellIO(CellDataIO):
             s_custom2 = read_param(ParamTableColumns.S_CUSTOM2, default=1.0)
             s_custom3 = read_param(ParamTableColumns.S_CUSTOM3, default=1.0)
             planned_drift = read_param(ParamTableColumns.PLANNED_DRIFT, default=1.0)
+            mean_excluded = to_bool(read_cell(2, last_col_for(MEAN_EXCLUDED_HEADER)))
+            sample_size_input_mode = read_cell(2, last_col_for(SAMPLE_SIZE_INPUT_MODE_HEADER))
+            if sample_size_input_mode not in ("diameter", "area"):
+                sample_size_input_mode = "area" if diameter_col is None and sample_area_col is not None else "diameter"
 
             rows_data: List[Dict[str, Any]] = []
             for row in range(2, max_data_row + 1):
@@ -727,8 +775,15 @@ class XlsxCellIO(CellDataIO):
                     "name": read_cell(row, name_col) or "",
                     "selected": to_bool(selected_raw),
                     "diameter": to_float(read_cell(row, diameter_col)),
+                    "sample_area": to_float(read_cell(row, sample_area_col)),
                     "resistance": to_float(read_cell(row, resistance_col)),
                 }
+                if row_dict["diameter"] is None and row_dict["sample_area"] is not None:
+                    with contextlib.suppress(Exception):
+                        row_dict["diameter"] = float(np.sqrt(4 * float(row_dict["sample_area"]) / np.pi))
+                if row_dict["sample_area"] is None and row_dict["diameter"] is not None:
+                    with contextlib.suppress(Exception):
+                        row_dict["sample_area"] = float(float(row_dict["diameter"]) ** 2 * np.pi / 4)
                 if select_col is None and not row_dict["selected"]:
                     # Older файлов без столбца выбора: считаем строки с данными выбранными
                     if any(v is not None for v in (row_dict["diameter"], row_dict["resistance"])):
@@ -783,7 +838,7 @@ class XlsxCellIO(CellDataIO):
                 if rd.get("diameter") is None or rd.get("resistance") is None:
                     continue
                 with contextlib.suppress(Exception):
-                    rd["square"] = calculate_square(diameter=float(rd["diameter"]), drift=float(drift))
+                    rd["square"] = calculate_rns_over_rn(rns=float(rns), resistance=float(rd["resistance"]))
                 with contextlib.suppress(Exception):
                     rns_val = calculate_rns_per_sample(
                         resistance=float(rd["resistance"]),
@@ -834,6 +889,7 @@ class XlsxCellIO(CellDataIO):
                 add_item(row_idx, DataTableColumns.NAME, rd.get("name") or "")
                 add_item(row_idx, DataTableColumns.SELECT, "True" if rd.get("selected") else "")
                 add_item(row_idx, DataTableColumns.DIAMETER, rd.get("diameter"))
+                add_item(row_idx, DataTableColumns.SAMPLE_AREA, rd.get("sample_area"))
                 add_item(row_idx, DataTableColumns.RESISTANCE, rd.get("resistance"))
                 add_item(row_idx, DataTableColumns.RNS, rd.get("rns"))
                 add_item(row_idx, DataTableColumns.RNS_ERROR, rd.get("rns_error"))
@@ -867,6 +923,8 @@ class XlsxCellIO(CellDataIO):
                     "s_real_custom1": s_real_c1,
                     "s_real_custom2": s_real_c2,
                     "s_real_custom3": s_real_c3,
+                    "mean_excluded": mean_excluded,
+                    "sample_size_input_mode": sample_size_input_mode,
                 }
             )
 

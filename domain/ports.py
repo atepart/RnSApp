@@ -7,6 +7,9 @@ class CellRepository(Protocol):
     def update_or_create_item(self, cell: int, **kwargs) -> Item:
         ...
 
+    def delete_item(self, cell: int) -> None:
+        ...
+
     def get(self, **kwargs) -> Optional[Item]:
         ...
 
@@ -26,7 +29,7 @@ class CellDataIO(Protocol):
     def save(
         self,
         file_name: str,
-        cell_grid_values: List[Tuple[str, str, str]],
+        cell_grid_values: List[Tuple[str, ...]],
         repo: CellRepository,
     ) -> None:
         ...

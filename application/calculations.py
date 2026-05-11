@@ -11,8 +11,8 @@ from domain.utils import (
     calculate_rn_sqrt,
     calculate_rns,
     calculate_rns_error_per_sample,
+    calculate_rns_over_rn,
     calculate_rns_per_sample,
-    calculate_square,
     drop_nans,
     linear_fit,
 )
@@ -220,11 +220,14 @@ class CalculationService:
         for row in range(self.data_table.rowCount()):
             diameter = self.data_table.get_column_value(row, DataTableColumns.DIAMETER)
             resistance = self.data_table.get_column_value(row, DataTableColumns.RESISTANCE)
-            if not resistance or not diameter:
+            if not resistance:
                 continue
 
-            square_value = calculate_square(diameter=diameter, drift=drift)
+            square_value = calculate_rns_over_rn(rns=rns_mean, resistance=resistance)
             self.data_table.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(str(square_value)))
+
+            if not diameter:
+                continue
 
             rns_value = calculate_rns_per_sample(
                 resistance=resistance,

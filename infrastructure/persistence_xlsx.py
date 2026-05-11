@@ -9,10 +9,15 @@ from domain.constants import DataTableColumns, ParamTableColumns
 from domain.models import InitialDataItem, InitialDataItemList
 from domain.ports import CellRepository
 
+MEAN_EXCLUDED_HEADER = "Не учитывать"
+MEAN_EXCLUDED_ATTR = "mean_excluded"
+SAMPLE_SIZE_INPUT_MODE_HEADER = "Режим ввода размера"
+SAMPLE_SIZE_INPUT_MODE_ATTR = "sample_size_input_mode"
+
 
 def save_cells_to_xlsx(
     file_name: str,
-    cell_grid_values: List[Tuple[str, str, str]],
+    cell_grid_values: List[Tuple[str, ...]],
     repo: CellRepository,
     data_headers,
     results_headers,
@@ -34,6 +39,7 @@ def save_cells_to_xlsx(
     ws_cells.title = "Cells data"
 
     init_data = list(cell_grid_values)
+    row_group_size = max((len(item) for item in init_data), default=3)
     output = []
 
     blocks = [init_data[i : i + 4] for i in range(0, len(init_data), 4)]
@@ -45,12 +51,12 @@ def save_cells_to_xlsx(
         for col_ind, coll in enumerate(row, 1):
             cell = ws_cells.cell(row=row_ind, column=col_ind, value=coll)
             cell.alignment = Alignment(horizontal="center", vertical="center")
-            if (row_ind - 1) % 3 == 0:
+            if (row_ind - 1) % row_group_size == 0:
                 cell.border = Border(
                     right=Side(style="thick"), left=Side(style="thick"), top=Side("thick"), bottom=Side(style="thick")
                 )
                 cell.font = Font(bold=True)
-            elif (row_ind - 3) % 3 == 0:
+            elif row_ind % row_group_size == 0:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"), bottom=Side(style="thick"))
             else:
                 cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
@@ -67,9 +73,17 @@ def save_cells_to_xlsx(
         _autofit(ws_data)
 
         ws_results = wb.create_sheet(f"Results №{cell_data.cell} {cell_data.name}")
-        ws_results.append(results_headers)
+        ws_results.append(list(results_headers) + [MEAN_EXCLUDED_HEADER, SAMPLE_SIZE_INPUT_MODE_HEADER])
         for i, param in enumerate(ParamTableColumns):
             ws_results.cell(row=2, column=i + 1, value=getattr(cell_data, param.slug, ""))
+        ws_results.cell(
+            row=2, column=len(results_headers) + 1, value=bool(getattr(cell_data, MEAN_EXCLUDED_ATTR, False))
+        )
+        ws_results.cell(
+            row=2,
+            column=len(results_headers) + 2,
+            value=getattr(cell_data, SAMPLE_SIZE_INPUT_MODE_ATTR, "diameter") or "diameter",
+        )
         _autofit(ws_results)
 
     if not file_name.endswith(".xlsx"):
@@ -102,12 +116,21 @@ def load_cells_from_xlsx(file_name: str):
 
         initial_data = InitialDataItemList()
         column_names = [ws_data[1][col].value for col in range(0, ws_data.max_column)]
+        data_header_aliases = {
+            DataTableColumns.SQUARE: ["Площадь (μm²)"],
+        }
+        optional_data_columns = {DataTableColumns.SAMPLE_AREA}
         for data_column in DataTableColumns:
             col = None
-            try:
-                col = column_names.index(data_column.slug)
-            except (ValueError,):
-                errors.append(f"Колонка '{data_column.slug}' не найдена в таблице '{data_name}'")
+            for name in [data_column.slug] + data_header_aliases.get(data_column, []):
+                try:
+                    col = column_names.index(name)
+                    break
+                except (ValueError,):
+                    continue
+            if col is None:
+                if data_column not in optional_data_columns:
+                    errors.append(f"Колонка '{data_column.slug}' не найдена в таблице '{data_name}'")
 
             for row in range(2, ws_data.max_row + 1):
                 try:
@@ -166,6 +189,26 @@ def load_cells_from_xlsx(file_name: str):
             except IndexError:
                 errors.append(f"Ошибка чтения '{result_column.name}' в '{result_name}'")
                 continue
+
+        try:
+            mean_excluded_col = result_column_names.index(MEAN_EXCLUDED_HEADER)
+            result_kwargs[MEAN_EXCLUDED_ATTR] = ws_result[2][mean_excluded_col].value in (
+                True,
+                "TRUE",
+                "True",
+                "true",
+                1,
+                "1",
+            )
+        except (ValueError, IndexError):
+            result_kwargs[MEAN_EXCLUDED_ATTR] = False
+
+        try:
+            mode_col = result_column_names.index(SAMPLE_SIZE_INPUT_MODE_HEADER)
+            mode = ws_result[2][mode_col].value
+            result_kwargs[SAMPLE_SIZE_INPUT_MODE_ATTR] = mode if mode in ("diameter", "area") else "diameter"
+        except (ValueError, IndexError):
+            result_kwargs[SAMPLE_SIZE_INPUT_MODE_ATTR] = "diameter"
 
         items.append(
             dict(

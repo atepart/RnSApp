@@ -36,7 +36,7 @@ class RnSApp(QtWidgets.QMainWindow):
 
         self.setWindowIcon(QIcon("./assets/rns-logo-alt.ico"))
         # Табличка с данными без заголовка-лейбла
-        self.data_table = DataTable(rows=50)
+        self.data_table = DataTable(rows=80)
 
         self.plot = pg.PlotWidget()
 
@@ -45,7 +45,8 @@ class RnSApp(QtWidgets.QMainWindow):
 
         # Контейнер действий без рамки группы
         self.actions_group = QtWidgets.QWidget()
-        self.actions_layout = QtWidgets.QGridLayout()
+        self.actions_layout = QtWidgets.QHBoxLayout()
+        self.actions_layout.setContentsMargins(0, 0, 0, 0)
         self.actions_layout.setSpacing(6)
 
         self.result_button = QtWidgets.QPushButton("Рассчитать")
@@ -64,16 +65,25 @@ class RnSApp(QtWidgets.QMainWindow):
         self.open_template_button.setToolTip("Загрузить шаблон данных (имена, диаметры, площади)")
         self.open_template_button.clicked.connect(self.open_template)
 
-        # Make buttons expand to fill the bottom row
-        for btn in (self.result_button, self.clean_rn_button, self.clean_all_button, self.open_template_button):
-            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.btn_load_cell_data = QtWidgets.QPushButton("Открыть файл")
+        self.btn_load_cell_data.setToolTip("Открыть данные из xlsx файла")
+        self.btn_load_cell_data.clicked.connect(self.load_cell_data)
 
-        self.actions_layout.addWidget(self.result_button, 0, 0)
-        self.actions_layout.addWidget(self.clean_rn_button, 0, 1)
-        self.actions_layout.addWidget(self.clean_all_button, 0, 2)
-        self.actions_layout.addWidget(self.open_template_button, 0, 3)
-        for col in range(4):
-            self.actions_layout.setColumnStretch(col, 1)
+        self.cell_save_button = QtWidgets.QPushButton("Сохранить")
+        self.cell_save_button.setToolTip("Сохранить записанные данные с RnS")
+        self.cell_save_button.clicked.connect(self.save_cell_data)
+
+        action_buttons = (
+            self.result_button,
+            self.clean_rn_button,
+            self.clean_all_button,
+            self.open_template_button,
+            self.btn_load_cell_data,
+            self.cell_save_button,
+        )
+        for btn in action_buttons:
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            self.actions_layout.addWidget(btn)
         self.actions_group.setLayout(self.actions_layout)
 
         # Поля параметров ввода как аккуратные лейблы + спинбоксы
@@ -130,30 +140,15 @@ class RnSApp(QtWidgets.QMainWindow):
         self.mean_drift = QtWidgets.QLabel("Средний уход: --", self)
         self.mean_rns = QtWidgets.QLabel("Средний RnS: --", self)
 
-        self.btn_load_cell_data = QtWidgets.QPushButton("Открыть")
-        self.btn_load_cell_data.setToolTip("Открыть данные из xlsx файла")
-        self.btn_load_cell_data.clicked.connect(self.load_cell_data)
-
-        self.btn_clear_cell_data = QtWidgets.QPushButton("Очистить ячейки")
-        self.btn_clear_cell_data.setToolTip("Очистить ячейки с записанными данными")
-        self.btn_clear_cell_data.clicked.connect(self.clear_cell_data)
-
-        self.cell_save_button = QtWidgets.QPushButton("Сохранить")
-        self.cell_save_button.setToolTip("Сохранить записанные данные с RnS")
-        self.cell_save_button.clicked.connect(self.save_cell_data)
-
         self.cell_h_layout.addWidget(self.mean_drift)
         self.cell_h_layout.addWidget(self.mean_rns)
-        self.cell_h_layout.addWidget(self.btn_clear_cell_data)
-        self.cell_h_layout.addWidget(self.btn_load_cell_data)
-        self.cell_h_layout.addWidget(self.cell_save_button)
+        self.cell_h_layout.addStretch(1)
 
         self.cell_v_layout.addLayout(self.cell_grid_layout)
         self.cell_v_layout.addLayout(self.cell_h_layout)
         self.cell_group.setLayout(self.cell_v_layout)
 
-        with contextlib.suppress(Exception):
-            CDockManager.setConfigFlag(CDockManager.DockManagerFlag.AutoHideFeatureEnabled, True)
+        self._configure_dock_manager_features()
 
         self.dock_manager = CDockManager(self)
 
@@ -172,7 +167,6 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_layout.setContentsMargins(6, 6, 6, 6)
         inputs_layout.setSpacing(6)
 
-        # Two columns: left (Rn/allowed/planned drift), right (S1-3)
         def add_labeled(vbox: QtWidgets.QVBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None):
             lbl = QtWidgets.QLabel(label)
             if tooltip:
@@ -189,16 +183,9 @@ class RnSApp(QtWidgets.QMainWindow):
         left_col.setSpacing(6)
         add_labeled(left_col, "Последовательное R:", self.rn_consistent)
         add_labeled(left_col, "Допустимое отклонение:", self.allowed_error)
-        add_labeled(left_col, "Заложенный уход:", self.planned_drift, planned_hint)
-
-        right_col = QtWidgets.QVBoxLayout()
-        right_col.setSpacing(6)
-        add_labeled(right_col, "Заданная площадь S1 (μm²):", self.s_custom1)
-        add_labeled(right_col, "Заданная площадь S2 (μm²):", self.s_custom2)
-        add_labeled(right_col, "Заданная площадь S3 (μm²):", self.s_custom3)
 
         columns_layout.addLayout(left_col, 1)
-        columns_layout.addLayout(right_col, 1)
+        columns_layout.addStretch(1)
 
         inputs_layout.addLayout(columns_layout)
         inputs_layout.addStretch(1)
@@ -206,6 +193,32 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_container.setLayout(inputs_layout)
         self.inputs_dock = CDockWidget("Действия")
         self.inputs_dock.setWidget(inputs_container)
+
+        area_calc_container = QtWidgets.QWidget(self)
+        area_calc_layout = QtWidgets.QHBoxLayout()
+        area_calc_layout.setContentsMargins(6, 6, 6, 6)
+        area_calc_layout.setSpacing(8)
+
+        def add_inline_labeled(
+            layout: QtWidgets.QHBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None
+        ):
+            lbl = QtWidgets.QLabel(label)
+            if tooltip:
+                lbl.setToolTip(tooltip)
+                widget.setToolTip(tooltip)
+            widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+            layout.addWidget(lbl)
+            layout.addWidget(widget)
+
+        add_inline_labeled(area_calc_layout, "Заложенный уход:", self.planned_drift, planned_hint)
+        add_inline_labeled(area_calc_layout, "Заданная площадь S1 (μm²):", self.s_custom1)
+        add_inline_labeled(area_calc_layout, "Заданная площадь S2 (μm²):", self.s_custom2)
+        add_inline_labeled(area_calc_layout, "Заданная площадь S3 (μm²):", self.s_custom3)
+        area_calc_layout.addStretch(1)
+        area_calc_container.setLayout(area_calc_layout)
+        area_calc_container.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.area_calc_dock = CDockWidget("Расчёт площади")
+        self.area_calc_dock.setWidget(area_calc_container)
 
         calc_container = QtWidgets.QWidget(self)
         calc_layout = QtWidgets.QVBoxLayout()
@@ -232,16 +245,26 @@ class RnSApp(QtWidgets.QMainWindow):
 
         left_area = self.dock_manager.addDockWidget(DockWidgetArea.LeftDockWidgetArea, self.data_dock)
         self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.inputs_dock, left_area)
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.area_calc_dock, left_area)
         self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.calc_dock, left_area)
 
         right_area = self.dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, self.plot_dock)
         self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.cells_dock, right_area)
 
-        for dock in (self.data_dock, self.inputs_dock, self.calc_dock, self.plot_dock, self.cells_dock):
+        self.dock_widgets = (
+            self.data_dock,
+            self.inputs_dock,
+            self.area_calc_dock,
+            self.calc_dock,
+            self.plot_dock,
+            self.cells_dock,
+        )
+        for dock in self.dock_widgets:
             try:
                 feats = dock.features()
-                feats &= ~CDockWidget.DockWidgetFeature.DockWidgetClosable
+                feats |= CDockWidget.DockWidgetFeature.DockWidgetClosable
                 feats &= ~CDockWidget.DockWidgetFeature.DockWidgetFloatable
+                feats &= ~CDockWidget.DockWidgetFeature.DockWidgetPinnable
                 dock.setFeatures(feats)
             except Exception:
                 pass
@@ -257,6 +280,23 @@ class RnSApp(QtWidgets.QMainWindow):
         act_restore.setToolTip("Построить расположение панелей по умолчанию")
         act_restore.triggered.connect(self.restore_default_layout)
         toolbar.addAction(act_restore)
+        self.dock_widgets_menu = QtWidgets.QMenu("Виджеты", self)
+        self.dock_widgets_menu.aboutToShow.connect(self._refresh_dock_widgets_menu)
+        dock_widgets_button = QtWidgets.QToolButton(self)
+        dock_widgets_button.setText("Виджеты")
+        dock_widgets_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        dock_widgets_button.setMenu(self.dock_widgets_menu)
+        toolbar.addWidget(dock_widgets_button)
+        self.sample_size_mode_button = QtWidgets.QToolButton(self)
+        self.sample_size_mode_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.sample_size_mode_menu = QtWidgets.QMenu(self.sample_size_mode_button)
+        act_diameter_mode = self.sample_size_mode_menu.addAction("Диаметр")
+        act_diameter_mode.triggered.connect(lambda: self.set_sample_size_input_mode("diameter"))
+        act_area_mode = self.sample_size_mode_menu.addAction("Площадь")
+        act_area_mode.triggered.connect(lambda: self.set_sample_size_input_mode("area"))
+        self.sample_size_mode_button.setMenu(self.sample_size_mode_menu)
+        toolbar.addWidget(self.sample_size_mode_button)
+        self.set_sample_size_input_mode(getattr(self.data_table, "sample_size_input_mode", "diameter"), save=False)
         act_create_template = QAction("Создать шаблон", self)
         act_create_template.setToolTip("Сохранить шаблон с именами, диаметрами и площадями")
         act_create_template.triggered.connect(self.create_template)
@@ -290,11 +330,52 @@ class RnSApp(QtWidgets.QMainWindow):
         # Restore persisted layout and geometry if available
         with contextlib.suppress(Exception):
             self.restore_settings()
-        # Always ensure all docks are visible on startup
         with contextlib.suppress(Exception):
-            for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
-                dock.setVisible(True)
-                dock.show()
+            self._clear_legacy_auto_hide_state()
+
+    def set_sample_size_input_mode(self, mode: str, save: bool = True) -> None:
+        mode = mode if mode in ("diameter", "area") else "diameter"
+        self.data_table.set_sample_size_input_mode(mode)
+        label = "Диаметр" if mode == "diameter" else "Площадь"
+        self.sample_size_mode_button.setText(f"Ввод: {label}")
+        self.sample_size_mode_button.setToolTip("Выбор столбца ввода размера образцов")
+        if save:
+            with contextlib.suppress(Exception):
+                self.save_settings()
+
+    @staticmethod
+    def _configure_dock_manager_features() -> None:
+        with contextlib.suppress(Exception):
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideFeatureEnabled, False)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.DockAreaHasAutoHideButton, False)
+            CDockManager.setAutoHideConfigFlag(CDockManager.eAutoHideFlag.AutoHideButtonTogglesArea, False)
+
+    def _refresh_dock_widgets_menu(self) -> None:
+        self.dock_widgets_menu.clear()
+        for dock in self.dock_widgets:
+            action = self.dock_widgets_menu.addAction(dock.windowTitle())
+            action.setCheckable(True)
+            action.setChecked(not dock.isClosed())
+            action.setToolTip("Отмечено = показан")
+            action.triggered.connect(lambda checked, current_dock=dock: self._set_dock_visible(current_dock, checked))
+
+    def _set_dock_visible(self, dock: CDockWidget, visible: bool) -> None:
+        with contextlib.suppress(Exception):
+            dock.toggleView(visible)
+        with contextlib.suppress(Exception):
+            self.save_settings()
+
+    def _clear_legacy_auto_hide_state(self) -> None:
+        has_auto_hide = False
+        for dock in self.dock_widgets:
+            with contextlib.suppress(Exception):
+                if dock.isAutoHide():
+                    has_auto_hide = True
+                    break
+        if has_auto_hide and getattr(self, "default_dock_state", None):
+            with contextlib.suppress(Exception):
+                self.dock_manager.restoreState(self.default_dock_state)
+                self.save_settings()
 
     # ----- Settings helpers for file dialogs -----
     def _get_initial_directory(self) -> str:
@@ -340,6 +421,12 @@ class RnSApp(QtWidgets.QMainWindow):
 
         settings.endGroup()
 
+        settings.beginGroup("DataTable")
+        with contextlib.suppress(Exception):
+            settings.setValue("horizontal_header_state", self.data_table.horizontalHeader().saveState())
+            settings.setValue("sample_size_input_mode", getattr(self.data_table, "sample_size_input_mode", "diameter"))
+        settings.endGroup()
+
     def restore_settings(self):
         settings = QSettings()
         settings.beginGroup("MainWindow")
@@ -356,6 +443,16 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.dock_manager.restoreState(state)
         settings.endGroup()
 
+        settings.beginGroup("DataTable")
+        header_state = settings.value("horizontal_header_state")
+        if header_state:
+            with contextlib.suppress(Exception):
+                self.data_table.horizontalHeader().restoreState(header_state)
+        mode = settings.value("sample_size_input_mode", "diameter", type=str)
+        with contextlib.suppress(Exception):
+            self.set_sample_size_input_mode(mode, save=False)
+        settings.endGroup()
+
     def restore_default_layout(self):
         # Restore dock layout to the default captured state
         with contextlib.suppress(Exception):
@@ -363,9 +460,9 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.dock_manager.restoreState(self.default_dock_state)
         # Ensure all docks are visible
         with contextlib.suppress(Exception):
-            for dock in (self.inputs_dock, self.calc_dock, self.data_dock, self.plot_dock, self.cells_dock):
-                dock.setVisible(True)
-                dock.show()
+            for dock in self.dock_widgets:
+                if dock.isClosed():
+                    dock.toggleView(True)
         # Persist current layout as the new state
         with contextlib.suppress(Exception):
             self.save_settings()
@@ -534,13 +631,21 @@ class RnSApp(QtWidgets.QMainWindow):
         rns_list = []
         drift_list = []
         for cell in self.cell_widgets:
+            if getattr(cell, "mean_excluded_checkbox", None) and cell.mean_excluded_checkbox.isChecked():
+                continue
             _, drift, rns = self.parse_cell(cell)
             if drift:
                 drift_list.append(drift)
             if rns:
                 rns_list.append(rns)
-        self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 3)}")
-        self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 1)}")
+        if drift_list:
+            self.mean_drift.setText(f"Средний уход: {round(np.mean(drift_list), 3)}")
+        else:
+            self.mean_drift.setText("Средний уход: --")
+        if rns_list:
+            self.mean_rns.setText(f"Средний RnS: {round(np.mean(rns_list), 1)}")
+        else:
+            self.mean_rns.setText("Средний RnS: --")
 
     def clear_means(self):
         self.mean_drift.setText("Средний уход: --")
@@ -559,6 +664,7 @@ class RnSApp(QtWidgets.QMainWindow):
         return self.calc.calculate_rns_drift_square_per_sample()
 
     def calculate_results(self):
+        self.data_table.sync_sample_size_columns()
         # Uncheck rows where Rn (Ω) is empty before calculations
         self.data_table.uncheck_rows_with_empty_rn()
         if not self.calc.calculate_results():
@@ -594,6 +700,8 @@ class RnSApp(QtWidgets.QMainWindow):
             s_real_custom1=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM1),
             s_real_custom2=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM2),
             s_real_custom3=self.param_table.get_column_value(0, ParamTableColumns.S_REAL_CUSTOM3),
+            mean_excluded=self.cell_widgets[cell - 1].mean_excluded_checkbox.isChecked(),
+            sample_size_input_mode=getattr(self.data_table, "sample_size_input_mode", "diameter"),
         )
         self.set_active_cell(cell)
         # After saving, clear dirty indicator for this cell
@@ -687,6 +795,17 @@ class RnSApp(QtWidgets.QMainWindow):
         rns = float(cell.rns.text().split("RnS: ")[1]) if cell.rns.text() else ""
         return [cell.name.text(), drift, rns]
 
+    def clear_saved_cell(self, cell: int) -> None:
+        cell_data = self.repo.get(cell=cell)
+        if not cell_data:
+            return
+        self.remove_plot(cell)
+        self.repo.delete_item(cell)
+        self.cell_widgets[cell - 1].clear()
+        self.calculate_means()
+        if self.active_cell_index == cell:
+            self.set_active_cell(0)
+
     def save_cell_data(self):
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.DontUseNativeDialog
@@ -701,7 +820,10 @@ class RnSApp(QtWidgets.QMainWindow):
         if not file_name:
             return
         self._remember_path(file_name)
-        init_data = [(cell.name.text(), cell.drift.text(), cell.rns.text()) for cell in self.cell_widgets]
+        self.data_table.sync_sample_size_columns()
+        init_data = [
+            (cell.name.text(), cell.drift.text(), cell.rns.text(), cell.rns_error.text()) for cell in self.cell_widgets
+        ]
         self.excel_io.save(
             file_name=file_name,
             cell_grid_values=init_data,
@@ -720,6 +842,7 @@ class RnSApp(QtWidgets.QMainWindow):
             return
         if not file_name.endswith(".xlsx"):
             file_name += ".xlsx"
+        self.data_table.sync_sample_size_columns()
 
         rows: list[dict] = []
         for row in range(self.data_table.rowCount()):
@@ -736,15 +859,21 @@ class RnSApp(QtWidgets.QMainWindow):
             if diam_item and diam_item.text():
                 with contextlib.suppress(Exception):
                     diam_val = float(str(diam_item.text()).replace(",", "."))
+            area_item = self.data_table.item(row, DataTableColumns.SAMPLE_AREA.index)
+            area_val = None
+            if area_item and area_item.text():
+                with contextlib.suppress(Exception):
+                    area_val = float(str(area_item.text()).replace(",", "."))
             cb = self.data_table.get_row_checkbox(row)
             selected = bool(cb.isChecked()) if cb else False
-            if any([name_val, selected, diam_val not in (None, "")]):
+            if any([name_val, selected, diam_val not in (None, ""), area_val not in (None, "")]):
                 rows.append(
                     {
                         "number": number_val if number_val not in (None, "") else row + 1,
                         "name": name_val,
                         "selected": selected,
                         "diameter": diam_val,
+                        "sample_area": area_val,
                     }
                 )
 
@@ -757,6 +886,7 @@ class RnSApp(QtWidgets.QMainWindow):
             "s_custom2": float(self.s_custom2.value()) if self.s_custom2 is not None else None,
             "s_custom3": float(self.s_custom3.value()) if self.s_custom3 is not None else None,
             "planned_drift": float(self.planned_drift.value()) if self.planned_drift is not None else None,
+            "sample_size_input_mode": getattr(self.data_table, "sample_size_input_mode", "diameter"),
         }
 
         try:
@@ -793,6 +923,8 @@ class RnSApp(QtWidgets.QMainWindow):
         self.clean_all()
         self.data_table.load_data(initial_data)
         with contextlib.suppress(Exception):
+            self.set_sample_size_input_mode(areas.get("sample_size_input_mode") or "diameter")
+        with contextlib.suppress(Exception):
             if areas.get("s_custom1") is not None:
                 self.s_custom1.setValue(float(areas["s_custom1"]))
             if areas.get("s_custom2") is not None:
@@ -812,6 +944,8 @@ class RnSApp(QtWidgets.QMainWindow):
         if not cell_data:
             return
         self.data_table.load_data(data=cell_data.initial_data)
+        with contextlib.suppress(Exception):
+            self.set_sample_size_input_mode(getattr(cell_data, "sample_size_input_mode", "diameter"))
         self.param_table.load_data(data=cell_data)
         self.plot_current_data()
         self.set_active_cell(cell)
@@ -843,21 +977,6 @@ class RnSApp(QtWidgets.QMainWindow):
             with contextlib.suppress(Exception):
                 if not is_active:
                     cw.set_dirty(False)
-
-    def clear_cell_data(self):
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            "Очистить записанные данные ячеек",
-            "Записанные данные ячеек будут удалены, продолжить?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No,
-        )
-        if reply == QtWidgets.QMessageBox.Yes:
-            for cell in self.cell_widgets:
-                cell.clear()
-            self.repo.clear()
-            self.clear_means()
-            self.set_active_cell(0)
 
     def load_cell_data(self):
         reply = QtWidgets.QMessageBox.question(
@@ -896,9 +1015,15 @@ class RnSApp(QtWidgets.QMainWindow):
                     first_cell = cell_item.cell
                 cell_widget = self.cell_widgets[cell_item.cell - 1]
                 cell_widget.name.setText(cell_item.name)
-                cell_widget.drift.setText(f"Уход: {round(cell_item.drift, 3)}")
-                cell_widget.rns.setText(f"RnS: {round(cell_item.rns, 1)}")
+                cell_widget.set_summary(
+                    drift=cell_item.drift,
+                    rns=cell_item.rns,
+                    rns_error=getattr(cell_item, "rns_error", 0),
+                )
                 cell_widget.updateUI()
+                blocker = QtCore.QSignalBlocker(cell_widget.mean_excluded_checkbox)
+                cell_widget.mean_excluded_checkbox.setChecked(bool(getattr(cell_item, "mean_excluded", False)))
+                del blocker
                 self.calculate_means()
 
             # Load first imported cell into current tables (so ParamTable shows S_real_* etc.)

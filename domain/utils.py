@@ -77,6 +77,18 @@ def calculate_square(diameter: float, drift: float):
     return (diameter - drift) ** 2 * np.pi / 4
 
 
+def calculate_diameter_from_area(area: float):
+    return np.sqrt(4 * area / np.pi)
+
+
+def calculate_area_from_diameter(diameter: float):
+    return diameter**2 * np.pi / 4
+
+
+def calculate_rns_over_rn(rns: float, resistance: float):
+    return rns / resistance
+
+
 def calculate_rns_error_per_sample(rns_i: float, rns: float):
     return np.abs(rns_i - rns)
 

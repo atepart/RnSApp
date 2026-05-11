@@ -6,6 +6,8 @@ from openpyxl.styles import Alignment, Font
 from domain.constants import DataTableColumns, ParamTableColumns
 from domain.models import InitialDataItem, InitialDataItemList
 
+SAMPLE_SIZE_INPUT_MODE_HEADER = "Режим ввода размера"
+
 _SANITIZE_MAP = {
     "/": "／",
     "\\": "＼",
@@ -48,6 +50,7 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
         DataTableColumns.NAME.slug,
         DataTableColumns.SELECT.slug,
         DataTableColumns.DIAMETER.slug,
+        DataTableColumns.SAMPLE_AREA.slug,
     ]
 
     param_columns: List[Tuple[ParamTableColumns, float | None]] = [
@@ -79,8 +82,17 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
         dcell = ws.cell(row=start_row + i, column=4, value=row.get("diameter"))
         dcell.number_format = "0.000"
         dcell.alignment = Alignment(horizontal="center", vertical="center")
+        acell = ws.cell(row=start_row + i, column=5, value=row.get("sample_area"))
+        acell.number_format = "0.000"
+        acell.alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=start_row + i, column=1).alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=start_row + i, column=3).alignment = Alignment(horizontal="center", vertical="center")
+
+    mode_col = len(headers + [p.name for p, _ in param_columns]) + 1
+    hcell = ws.cell(row=1, column=mode_col, value=SAMPLE_SIZE_INPUT_MODE_HEADER)
+    hcell.font = Font(bold=True)
+    hcell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=2, column=mode_col, value=areas.get("sample_size_input_mode") or "diameter")
 
     # Autofit widths for all columns based on content
     def _autofit(col_idx: int, extra: int = 2, min_width: int = 10):
@@ -123,9 +135,15 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
     name_col = col_for(DataTableColumns.NAME.slug)
     select_col = col_for(DataTableColumns.SELECT.slug)
     diameter_col = col_for(DataTableColumns.DIAMETER.slug)
+    sample_area_col = col_for(DataTableColumns.SAMPLE_AREA.slug)
 
-    if diameter_col is None or name_col is None or number_col is None or select_col is None:
-        errors.append("Не найдены все обязательные колонки (№, Имя, ✓, Диаметр).")
+    if (
+        name_col is None
+        or number_col is None
+        or select_col is None
+        or (diameter_col is None and sample_area_col is None)
+    ):
+        errors.append("Не найдены все обязательные колонки (№, Имя, ✓, Диаметр/Площадь).")
 
     def last_non_empty(col_idx: int | None) -> int:
         if col_idx is None:
@@ -141,6 +159,7 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
         last_non_empty(name_col),
         last_non_empty(select_col),
         last_non_empty(diameter_col),
+        last_non_empty(sample_area_col),
     )
 
     initial_data = InitialDataItemList()
@@ -150,8 +169,9 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
         name_val = ws.cell(row=r, column=name_col).value if name_col else ""
         select_val = ws.cell(row=r, column=select_col).value if select_col else ""
         diam_val = ws.cell(row=r, column=diameter_col).value if diameter_col else ""
+        area_val = ws.cell(row=r, column=sample_area_col).value if sample_area_col else ""
 
-        if all(v in (None, "", False) for v in (name_val, select_val, diam_val)):
+        if all(v in (None, "", False) for v in (name_val, select_val, diam_val, area_val)):
             continue
 
         initial_data.append(InitialDataItem(row=row_idx, col=DataTableColumns.NUMBER.index, value=num_val))
@@ -164,12 +184,14 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
             )
         )
         initial_data.append(InitialDataItem(row=row_idx, col=DataTableColumns.DIAMETER.index, value=diam_val or ""))
+        initial_data.append(InitialDataItem(row=row_idx, col=DataTableColumns.SAMPLE_AREA.index, value=area_val or ""))
 
     param_values: Dict[str, float | None] = {
         "s_custom1": None,
         "s_custom2": None,
         "s_custom3": None,
         "planned_drift": None,
+        "sample_size_input_mode": "diameter",
     }
     for param, key in (
         (ParamTableColumns.S_CUSTOM1, "s_custom1"),
@@ -180,5 +202,13 @@ def load_template(file_path: str) -> Tuple[InitialDataItemList, Dict[str, float 
         col = col_for(param.name)
         if col:
             param_values[key] = _to_float(ws.cell(row=2, column=col).value)
+
+    mode_col = col_for(SAMPLE_SIZE_INPUT_MODE_HEADER)
+    if mode_col:
+        mode = ws.cell(row=2, column=mode_col).value
+        if mode in ("diameter", "area"):
+            param_values["sample_size_input_mode"] = mode
+    elif diameter_col is None and sample_area_col is not None:
+        param_values["sample_size_input_mode"] = "area"
 
     return initial_data, param_values, errors

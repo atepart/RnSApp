@@ -2,12 +2,14 @@ import contextlib
 import logging
 from typing import List
 
+import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QHeaderView
 
 from domain.constants import DataTableColumns
 from domain.models import InitialDataItem
+from domain.utils import calculate_area_from_diameter, calculate_diameter_from_area
 from ui.widgets.delegates import RoundedDelegate
 from ui.widgets.tables.item import TableWidgetItem
 from ui.widgets.tables.mixins import TableMixin
@@ -55,10 +57,12 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnWidth(DataTableColumns.RESISTANCE.index, 160)
         self.setColumnWidth(DataTableColumns.RNS.index, 100)
         self.setColumnWidth(DataTableColumns.RN_SQRT.index, 100)
+        self.setColumnWidth(DataTableColumns.SAMPLE_AREA.index, 160)
 
         self.header.setSectionResizeMode(DataTableColumns.NUMBER.index, QHeaderView.ResizeMode.ResizeToContents)
         self.header.setSectionResizeMode(DataTableColumns.SELECT.index, QHeaderView.ResizeMode.ResizeToContents)
         self.header.setSectionResizeMode(DataTableColumns.DIAMETER.index, QHeaderView.ResizeMode.ResizeToContents)
+        self.header.setSectionResizeMode(DataTableColumns.SAMPLE_AREA.index, QHeaderView.ResizeMode.ResizeToContents)
         self.header.setSectionResizeMode(DataTableColumns.DRIFT.index, QHeaderView.ResizeMode.ResizeToContents)
         self.header.setSectionResizeMode(DataTableColumns.SQUARE.index, QHeaderView.ResizeMode.ResizeToContents)
 
@@ -88,6 +92,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(DataTableColumns.DRIFT.index, True)
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
         self.setColumnHidden(DataTableColumns.RN_SQRT.index, True)
+        self.set_sample_size_input_mode("diameter")
 
         self.itemChanged.connect(self.on_item_changed)
         self.clear_all()
@@ -115,7 +120,11 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             pass
 
     def on_item_changed(self, item):
-        if item.column() in (DataTableColumns.DIAMETER.index, DataTableColumns.RESISTANCE.index):
+        if item.column() in (
+            DataTableColumns.DIAMETER.index,
+            DataTableColumns.SAMPLE_AREA.index,
+            DataTableColumns.RESISTANCE.index,
+        ):
             row = item.row()
             cb = self.get_row_checkbox(row)
             if cb:
@@ -243,6 +252,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         start_col = self.currentColumn()
         if start_col not in [
             DataTableColumns.DIAMETER.index,
+            DataTableColumns.SAMPLE_AREA.index,
             DataTableColumns.RESISTANCE.index,
             DataTableColumns.NUMBER.index,
             DataTableColumns.NAME.index,
@@ -255,6 +265,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             for j, value in enumerate(values):
                 if start_col in [
                     DataTableColumns.DIAMETER.index,
+                    DataTableColumns.SAMPLE_AREA.index,
                     DataTableColumns.RESISTANCE.index,
                 ]:
                     value = value.replace(",", ".")
@@ -290,12 +301,14 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.RNS.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.DRIFT.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.DIAMETER.index, TableWidgetItem(""))
+            self.setItem(row, DataTableColumns.SAMPLE_AREA.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.RESISTANCE.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.NUMBER.index, TableWidgetItem(str(row + 1)))
             self._ensure_checkbox(row, checked=False)
             self.setItem(row, DataTableColumns.SELECT.index, QtWidgets.QTableWidgetItem(""))
             self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))
+        self.set_sample_size_input_mode(getattr(self, "sample_size_input_mode", "diameter"))
         self.header.checkbox.setChecked(True)
         self.itemChanged.connect(self.on_item_changed)
 
@@ -309,6 +322,48 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
             self.setItem(row, DataTableColumns.RESISTANCE.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.RN_SQRT.index, TableWidgetItem(""))
             self.setItem(row, DataTableColumns.SQUARE.index, TableWidgetItem(""))
+
+    def set_sample_size_input_mode(self, mode: str):
+        if mode not in ("diameter", "area"):
+            mode = "diameter"
+        self.sample_size_input_mode = mode
+        self.setColumnHidden(DataTableColumns.DIAMETER.index, mode != "diameter")
+        self.setColumnHidden(DataTableColumns.SAMPLE_AREA.index, mode != "area")
+
+    def sync_sample_size_columns(self):
+        self.end_editing()
+        with contextlib.suppress(TypeError):
+            self.itemChanged.disconnect()
+        for row in range(self.rowCount()):
+            if getattr(self, "sample_size_input_mode", "diameter") == "area":
+                source = self.item(row, DataTableColumns.SAMPLE_AREA.index)
+                text = source.text().strip() if source and source.text() else ""
+                if not text:
+                    continue
+                try:
+                    area = float(text.replace(",", "."))
+                    if area <= 0:
+                        continue
+                    diameter = float(calculate_diameter_from_area(area))
+                    if np.isfinite(diameter):
+                        self.setItem(row, DataTableColumns.DIAMETER.index, TableWidgetItem(str(diameter)))
+                except Exception:
+                    continue
+            else:
+                source = self.item(row, DataTableColumns.DIAMETER.index)
+                text = source.text().strip() if source and source.text() else ""
+                if not text:
+                    continue
+                try:
+                    diameter = float(text.replace(",", "."))
+                    if diameter <= 0:
+                        continue
+                    area = float(calculate_area_from_diameter(diameter))
+                    if np.isfinite(area):
+                        self.setItem(row, DataTableColumns.SAMPLE_AREA.index, TableWidgetItem(str(area)))
+                except Exception:
+                    continue
+        self.itemChanged.connect(self.on_item_changed)
         self.itemChanged.connect(self.on_item_changed)
 
     def clear_calculations(self):

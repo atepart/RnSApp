@@ -9,6 +9,8 @@ class CellWidget(QtWidgets.QGroupBox):
         self.index = index
         self.param_table = param_table
         self.app = app
+        self._is_active = False
+        self._is_dirty = False
         self.initUI()
 
     def initUI(self):
@@ -17,15 +19,8 @@ class CellWidget(QtWidgets.QGroupBox):
         hlayout2 = QtWidgets.QHBoxLayout()
 
         self.number = QtWidgets.QLabel(self)
-        self.number.setText(f"№{self.index}")
+        self._update_number_text()
         hlayout1.addWidget(self.number)
-
-        # Dirty indicator star (hidden by default), sits next to number
-        self.dirty_star = QtWidgets.QLabel(self)
-        self.dirty_star.setText("*")
-        self.dirty_star.setStyleSheet("color: #D32F2F; font-weight: bold;")
-        self.dirty_star.setVisible(False)
-        hlayout1.addWidget(self.dirty_star)
 
         self.name = QtWidgets.QLabel(self)
         hlayout1.addWidget(self.name)
@@ -40,6 +35,11 @@ class CellWidget(QtWidgets.QGroupBox):
         hlayout2.addWidget(self.rns)
         self.rns.setVisible(False)
 
+        self.rns_error = QtWidgets.QLabel(self)
+        self.rns_error.setToolTip("Ошибка RnS, %")
+        hlayout2.addWidget(self.rns_error)
+        self.rns_error.setVisible(False)
+
         layout.addLayout(hlayout1)
         layout.addLayout(hlayout2)
 
@@ -51,6 +51,11 @@ class CellWidget(QtWidgets.QGroupBox):
         self.checkbox.setVisible(False)
         self.checkbox.stateChanged.connect(self.buildGraph)
         layout.addWidget(self.checkbox)
+
+        self.mean_excluded_checkbox = QtWidgets.QCheckBox("Не учитывать")
+        self.mean_excluded_checkbox.setVisible(False)
+        self.mean_excluded_checkbox.stateChanged.connect(self.on_mean_excluded_changed)
+        layout.addWidget(self.mean_excluded_checkbox)
 
         self.setLayout(layout)
 
@@ -72,17 +77,35 @@ class CellWidget(QtWidgets.QGroupBox):
             self.updateUI()
 
     def writeData(self):
-        self.rns.setText(f"RnS: {round(self.param_table.get_column_value(0, ParamTableColumns.RNS), 1)}")
-        self.drift.setText(f"Уход: {round(self.param_table.get_column_value(0, ParamTableColumns.DRIFT), 3)}")
+        rns = self.param_table.get_column_value(0, ParamTableColumns.RNS)
+        drift = self.param_table.get_column_value(0, ParamTableColumns.DRIFT)
+        rns_error = self.param_table.get_column_value(0, ParamTableColumns.RNS_ERROR)
+        self.set_summary(drift=drift, rns=rns, rns_error=rns_error)
         self.app.calculate_means()
         self.app.addCellData(cell=self.index, name=self.name.text())
+
+    def set_summary(self, drift, rns, rns_error):
+        self.rns.setText(f"RnS: {round(rns, 1)}")
+        self.drift.setText(f"Уход: {round(drift, 3)}")
+        self.rns_error.setText(f"Ошибка RnS: {self._format_rns_error_percent(rns, rns_error)}%")
+
+    @staticmethod
+    def _format_rns_error_percent(rns, rns_error):
+        try:
+            if not rns:
+                return "--"
+            return round(abs(float(rns_error)) / abs(float(rns)) * 100, 2)
+        except Exception:
+            return "--"
 
     def updateUI(self):
         if self.rns.text() is not None and self.drift.text() is not None:
             self.writeButton.setVisible(False)
             self.rns.setVisible(True)
             self.drift.setVisible(True)
+            self.rns_error.setVisible(True)
             self.checkbox.setVisible(True)
+            self.mean_excluded_checkbox.setVisible(True)
             self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
 
     def buildGraph(self, state: int):
@@ -98,6 +121,12 @@ class CellWidget(QtWidgets.QGroupBox):
             self.app.remove_plot(self.index)
             if cell_data:
                 cell_data.is_plot = False
+
+    def on_mean_excluded_changed(self, state: int):
+        cell_data = self.app.repo.get(cell=self.index)
+        if cell_data is not None:
+            cell_data.mean_excluded = state == QtCore.Qt.CheckState.Checked.value
+        self.app.calculate_means()
 
     def openRenameDialog(self):
         # Prefill dialog with current name
@@ -141,6 +170,18 @@ class CellWidget(QtWidgets.QGroupBox):
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             self.writeData()
 
+    def openClearDataDialog(self):
+        cell_name = self.name.text() or f"№{self.index}"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Очистить ячейку",
+            f"Все сохраненные данные ячейки {cell_name} будут удалены. Продолжить?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if reply == QtWidgets.QMessageBox.Yes:
+            self.app.clear_saved_cell(self.index)
+
     def showData(self):
         reply = QtWidgets.QMessageBox.question(
             self,
@@ -168,28 +209,54 @@ class CellWidget(QtWidgets.QGroupBox):
         rewriteAction.triggered.connect(self.openRewriteDataDialog)
         menu.addAction(rewriteAction)
 
+        menu.addSeparator()
+
+        clearAction = QtGui.QAction("Очистить", self)
+        clearAction.triggered.connect(self.openClearDataDialog)
+        menu.addAction(clearAction)
+
         menu.exec(self.mapToGlobal(position))
 
     def clear(self):
         self.name.setText("")
         self.rns.setText("")
         self.drift.setText("")
+        self.rns_error.setText("")
         self.rns.setVisible(False)
         self.drift.setVisible(False)
+        self.rns_error.setVisible(False)
+        checkbox_blocker = QtCore.QSignalBlocker(self.checkbox)
         self.checkbox.setChecked(False)
+        del checkbox_blocker
         self.checkbox.setVisible(False)
+        mean_blocker = QtCore.QSignalBlocker(self.mean_excluded_checkbox)
+        self.mean_excluded_checkbox.setChecked(False)
+        del mean_blocker
+        self.mean_excluded_checkbox.setVisible(False)
         self.writeButton.setVisible(True)
         self.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
+        self.set_dirty(False)
 
     def set_active(self, value: bool):
+        self._is_active = bool(value)
+        self._update_number_text()
         if value:
-            self.number.setText(f"<b>№{self.index}</b>")
             # Pale light red/pink background for active cell
             self.setStyleSheet(f"QGroupBox {{ background-color: {ACTIVE_CELL_COLOR}; }}")
         else:
-            self.number.setText(f"№{self.index}")
             # Reset background when inactive
             self.setStyleSheet("")
 
     def set_dirty(self, value: bool):
-        self.dirty_star.setVisible(bool(value))
+        self._is_dirty = bool(value)
+        self._update_number_text()
+
+    def _update_number_text(self):
+        text = f"№{self.index}{'*' if self._is_dirty else ''}"
+        if self._is_active:
+            text = f"<b>{text}</b>"
+        self.number.setText(text)
+        if self._is_dirty:
+            self.number.setToolTip("Есть несохраненные изменения")
+        else:
+            self.number.setToolTip("")
