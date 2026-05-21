@@ -4,7 +4,7 @@ from PySide6 import QtCore, QtWidgets
 
 from domain.constants import ParamTableColumns
 from domain.models import Item
-from ui.widgets.delegates import RoundedDelegate
+from ui.widgets.delegates import RnSErrorPercentDelegate, RoundedDelegate
 from ui.widgets.tables.item import TableWidgetItem
 from ui.widgets.tables.mixins import TableMixin
 
@@ -56,7 +56,10 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.RNS.index, RoundedDelegate(rounded=1, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.DRIFT_ERROR.index, RoundedDelegate(rounded=2, parent=self))
-        self.setItemDelegateForColumn(ParamTableColumns.RNS_ERROR.index, RoundedDelegate(rounded=2, parent=self))
+        self.setItemDelegateForColumn(
+            ParamTableColumns.RNS_ERROR.index,
+            RnSErrorPercentDelegate(rns_column=ParamTableColumns.RNS.index, parent=self),
+        )
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM1.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM2.index, RoundedDelegate(rounded=3, parent=self))
         self.setItemDelegateForColumn(ParamTableColumns.S_REAL_CUSTOM3.index, RoundedDelegate(rounded=3, parent=self))

@@ -22,6 +22,7 @@ from ui.update_dialogs import FetchReleasesWorker, ReleasePickerDialog
 from ui.widgets import CellWidget, DataTable, ParamTable
 
 logger = logging.getLogger(__name__)
+CURRENT_DOCK_LAYOUT_VERSION = 2
 
 
 class RnSApp(QtWidgets.QMainWindow):
@@ -167,27 +168,26 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_layout.setContentsMargins(6, 6, 6, 6)
         inputs_layout.setSpacing(6)
 
-        def add_labeled(vbox: QtWidgets.QVBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None):
+        def add_action_labeled(
+            layout: QtWidgets.QHBoxLayout, label: str, widget: QtWidgets.QWidget, tooltip: str | None = None
+        ):
             lbl = QtWidgets.QLabel(label)
             if tooltip:
                 lbl.setToolTip(tooltip)
                 widget.setToolTip(tooltip)
-            vbox.addWidget(lbl)
-            vbox.addWidget(widget)
+            widget.setMinimumWidth(120)
+            widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            layout.addWidget(lbl)
+            layout.addWidget(widget, 1)
 
-        columns_layout = QtWidgets.QHBoxLayout()
-        columns_layout.setContentsMargins(0, 0, 0, 0)
-        columns_layout.setSpacing(12)
+        inputs_row = QtWidgets.QHBoxLayout()
+        inputs_row.setContentsMargins(0, 0, 0, 0)
+        inputs_row.setSpacing(8)
+        add_action_labeled(inputs_row, "Последовательное R:", self.rn_consistent)
+        add_action_labeled(inputs_row, "Допустимое отклонение:", self.allowed_error)
+        inputs_row.addStretch(1)
 
-        left_col = QtWidgets.QVBoxLayout()
-        left_col.setSpacing(6)
-        add_labeled(left_col, "Последовательное R:", self.rn_consistent)
-        add_labeled(left_col, "Допустимое отклонение:", self.allowed_error)
-
-        columns_layout.addLayout(left_col, 1)
-        columns_layout.addStretch(1)
-
-        inputs_layout.addLayout(columns_layout)
+        inputs_layout.addLayout(inputs_row)
         inputs_layout.addStretch(1)
         inputs_layout.addWidget(self.actions_group)
         inputs_container.setLayout(inputs_layout)
@@ -244,12 +244,18 @@ class RnSApp(QtWidgets.QMainWindow):
         self.cells_dock.setWidget(cells_container)
 
         left_area = self.dock_manager.addDockWidget(DockWidgetArea.LeftDockWidgetArea, self.data_dock)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.inputs_dock, left_area)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.area_calc_dock, left_area)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.calc_dock, left_area)
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.cells_dock, left_area)
 
         right_area = self.dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, self.plot_dock)
-        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.cells_dock, right_area)
+        bottom_right_area = self.dock_manager.addDockWidget(
+            DockWidgetArea.BottomDockWidgetArea, self.calc_dock, right_area
+        )
+        actions_area = self.dock_manager.addDockWidget(
+            DockWidgetArea.RightDockWidgetArea, self.inputs_dock, bottom_right_area
+        )
+        with contextlib.suppress(Exception):
+            self.dock_manager.addDockWidgetTabToArea(self.area_calc_dock, actions_area)
+            self.inputs_dock.setAsCurrentTab()
 
         self.dock_widgets = (
             self.data_dock,
@@ -418,6 +424,7 @@ class RnSApp(QtWidgets.QMainWindow):
         settings.beginGroup("DockManager")
         with contextlib.suppress(Exception):
             settings.setValue("state", self.dock_manager.saveState())
+            settings.setValue("layout_version", CURRENT_DOCK_LAYOUT_VERSION)
 
         settings.endGroup()
 
@@ -438,7 +445,8 @@ class RnSApp(QtWidgets.QMainWindow):
 
         settings.beginGroup("DockManager")
         state = settings.value("state")
-        if state:
+        layout_version = settings.value("layout_version", 0, type=int)
+        if state and layout_version == CURRENT_DOCK_LAYOUT_VERSION:
             with contextlib.suppress(Exception):
                 self.dock_manager.restoreState(state)
         settings.endGroup()
@@ -448,6 +456,8 @@ class RnSApp(QtWidgets.QMainWindow):
         if header_state:
             with contextlib.suppress(Exception):
                 self.data_table.horizontalHeader().restoreState(header_state)
+        with contextlib.suppress(Exception):
+            self.data_table.apply_fixed_visual_column_order()
         mode = settings.value("sample_size_input_mode", "diameter", type=str)
         with contextlib.suppress(Exception):
             self.set_sample_size_input_mode(mode, save=False)
@@ -864,14 +874,12 @@ class RnSApp(QtWidgets.QMainWindow):
             if area_item and area_item.text():
                 with contextlib.suppress(Exception):
                     area_val = float(str(area_item.text()).replace(",", "."))
-            cb = self.data_table.get_row_checkbox(row)
-            selected = bool(cb.isChecked()) if cb else False
-            if any([name_val, selected, diam_val not in (None, ""), area_val not in (None, "")]):
+            if any([name_val, diam_val not in (None, ""), area_val not in (None, "")]):
                 rows.append(
                     {
                         "number": number_val if number_val not in (None, "") else row + 1,
                         "name": name_val,
-                        "selected": selected,
+                        "selected": True,
                         "diameter": diam_val,
                         "sample_area": area_val,
                     }

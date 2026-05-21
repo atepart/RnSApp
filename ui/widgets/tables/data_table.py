@@ -38,6 +38,20 @@ class Header(QHeaderView):
 
 
 class DataTable(TableMixin, QtWidgets.QTableWidget):
+    FIXED_VISUAL_COLUMN_ORDER = (
+        DataTableColumns.NUMBER,
+        DataTableColumns.NAME,
+        DataTableColumns.SELECT,
+        DataTableColumns.DIAMETER,
+        DataTableColumns.SAMPLE_AREA,
+        DataTableColumns.RESISTANCE,
+        DataTableColumns.RNS,
+        DataTableColumns.RNS_ERROR,
+        DataTableColumns.DRIFT,
+        DataTableColumns.SQUARE,
+        DataTableColumns.RN_SQRT,
+    )
+
     def __init__(self, rows) -> None:
         super(DataTable, self).__init__(rows, len(DataTableColumns.get_all_names()))
         self.header = Header(self)
@@ -92,6 +106,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(DataTableColumns.DRIFT.index, True)
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
         self.setColumnHidden(DataTableColumns.RN_SQRT.index, True)
+        self.apply_fixed_visual_column_order()
         self.set_sample_size_input_mode("diameter")
 
         self.itemChanged.connect(self.on_item_changed)
@@ -327,8 +342,16 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         if mode not in ("diameter", "area"):
             mode = "diameter"
         self.sample_size_input_mode = mode
+        self.apply_fixed_visual_column_order()
         self.setColumnHidden(DataTableColumns.DIAMETER.index, mode != "diameter")
         self.setColumnHidden(DataTableColumns.SAMPLE_AREA.index, mode != "area")
+
+    def apply_fixed_visual_column_order(self):
+        header = self.horizontalHeader()
+        for visual_index, column in enumerate(self.FIXED_VISUAL_COLUMN_ORDER):
+            current_visual_index = header.visualIndex(column.index)
+            if current_visual_index != visual_index:
+                header.moveSection(current_visual_index, visual_index)
 
     def sync_sample_size_columns(self):
         self.end_editing()

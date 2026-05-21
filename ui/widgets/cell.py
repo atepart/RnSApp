@@ -17,6 +17,7 @@ class CellWidget(QtWidgets.QGroupBox):
         layout = QtWidgets.QVBoxLayout()
         hlayout1 = QtWidgets.QHBoxLayout()
         hlayout2 = QtWidgets.QHBoxLayout()
+        hlayout3 = QtWidgets.QHBoxLayout()
 
         self.number = QtWidgets.QLabel(self)
         self._update_number_text()
@@ -37,11 +38,13 @@ class CellWidget(QtWidgets.QGroupBox):
 
         self.rns_error = QtWidgets.QLabel(self)
         self.rns_error.setToolTip("Ошибка RnS, %")
-        hlayout2.addWidget(self.rns_error)
+        hlayout3.addWidget(self.rns_error)
+        hlayout3.addStretch(1)
         self.rns_error.setVisible(False)
 
         layout.addLayout(hlayout1)
         layout.addLayout(hlayout2)
+        layout.addLayout(hlayout3)
 
         self.writeButton = QtWidgets.QPushButton("Записать")
         self.writeButton.clicked.connect(self.openWriteDialog)
@@ -94,7 +97,7 @@ class CellWidget(QtWidgets.QGroupBox):
         try:
             if not rns:
                 return "--"
-            return round(abs(float(rns_error)) / abs(float(rns)) * 100, 2)
+            return f"{abs(float(rns_error)) / abs(float(rns)) * 100:.2f}"
         except Exception:
             return "--"
 
