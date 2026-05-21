@@ -162,8 +162,19 @@ class XlsxCellIO(CellDataIO):
         ws_cells.title = "Cells data"
         _export_cells_grid(ws_cells, cell_grid_values)
 
-        # Data columns to export: exclude DRIFT (per request)
-        export_data_columns: List[DataTableColumns] = [c for c in DataTableColumns if c is not DataTableColumns.DRIFT]
+        # Keep the sample-size columns adjacent in exported files too; formulas still use header/index mapping.
+        export_data_columns: List[DataTableColumns] = [
+            DataTableColumns.NUMBER,
+            DataTableColumns.NAME,
+            DataTableColumns.SELECT,
+            DataTableColumns.DIAMETER,
+            DataTableColumns.SAMPLE_AREA,
+            DataTableColumns.RESISTANCE,
+            DataTableColumns.RNS,
+            DataTableColumns.RNS_ERROR,
+            DataTableColumns.SQUARE,
+            DataTableColumns.RN_SQRT,
+        ]
 
         def _coerce_value(val, dtype):
             # Convert values to proper numeric types so Excel treats them as numbers

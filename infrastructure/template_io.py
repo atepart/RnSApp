@@ -78,7 +78,7 @@ def save_template(file_path: str, sheet_name: str, rows: List[Dict], areas: Dict
     for i, row in enumerate(rows):
         ws.cell(row=start_row + i, column=1, value=row.get("number"))
         ws.cell(row=start_row + i, column=2, value=row.get("name"))
-        ws.cell(row=start_row + i, column=3, value=bool(row.get("selected", False)))
+        ws.cell(row=start_row + i, column=3, value=True)
         dcell = ws.cell(row=start_row + i, column=4, value=row.get("diameter"))
         dcell.number_format = "0.000"
         dcell.alignment = Alignment(horizontal="center", vertical="center")
