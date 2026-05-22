@@ -183,8 +183,8 @@ class RnSApp(QtWidgets.QMainWindow):
         inputs_row = QtWidgets.QHBoxLayout()
         inputs_row.setContentsMargins(0, 0, 0, 0)
         inputs_row.setSpacing(8)
-        add_action_labeled(inputs_row, "Последовательное R:", self.rn_consistent)
         add_action_labeled(inputs_row, "Допустимое отклонение:", self.allowed_error)
+        add_action_labeled(inputs_row, "Последовательное R:", self.rn_consistent)
         inputs_row.addStretch(1)
 
         inputs_layout.addLayout(inputs_row)

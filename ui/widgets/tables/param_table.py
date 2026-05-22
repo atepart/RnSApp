@@ -1,6 +1,6 @@
 import contextlib
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from domain.constants import ParamTableColumns
 from domain.models import Item
@@ -14,6 +14,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         super(ParamTable, self).__init__(1, len(ParamTableColumns.get_all_names()))
 
         self.setHorizontalHeaderLabels(ParamTableColumns.get_all_names())
+        self._minimum_column_widths: dict[int, int] = {}
+        self._enforcing_column_width = False
         # Header alignment bold + bottom border
         try:
             f = self.horizontalHeader().font()
@@ -23,8 +25,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
             pass
         self.horizontalHeader().setDefaultAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.horizontalHeader().setStyleSheet("QHeaderView::section { border-bottom: 2px solid black; }")
-        # Enable horizontal scrolling by avoiding stretch and letting content define width
-        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        # Keep result columns stable after calculation; content can become much wider than the useful display width.
+        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Interactive)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         # Disable vertical scrollbar entirely (single-row table)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -80,6 +82,8 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
         self.setColumnHidden(ParamTableColumns.D_CUSTOM2.index, True)
         self.setColumnHidden(ParamTableColumns.D_CUSTOM3.index, True)
         self.setColumnHidden(ParamTableColumns.PLANNED_DRIFT.index, True)
+        self._apply_initial_column_widths()
+        self.horizontalHeader().sectionResized.connect(self._enforce_min_column_width)
 
         self.clear_all()
 
@@ -89,6 +93,41 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
     def clear_all(self):
         for col in range(self.columnCount()):
             self.setItem(0, col, TableWidgetItem(""))
+
+    def _apply_initial_column_widths(self):
+        header_metrics = QtGui.QFontMetrics(self.horizontalHeader().font())
+        cell_metrics = QtGui.QFontMetrics(self.font())
+        widest_digit = max("0123456789", key=cell_metrics.horizontalAdvance)
+        sample_widths = {
+            ParamTableColumns.RNS: f"{widest_digit * 4}.{widest_digit}",
+            ParamTableColumns.RNS_ERROR: (
+                f"{widest_digit * 3}.{widest_digit * 2} " f"({widest_digit * 2}.{widest_digit}%)"
+            ),
+        }
+        padding = 24
+        self._minimum_column_widths = {
+            column.index: max(header_metrics.horizontalAdvance(column.name), cell_metrics.horizontalAdvance(sample))
+            + padding
+            for column, sample in sample_widths.items()
+        }
+
+        for column in ParamTableColumns:
+            header_width = header_metrics.horizontalAdvance(column.name)
+            sample_text = sample_widths.get(column)
+            sample_width = cell_metrics.horizontalAdvance(sample_text) if sample_text else 0
+            self.setColumnWidth(column.index, max(header_width, sample_width) + padding)
+
+    def _enforce_min_column_width(self, logical_index: int, _old_size: int, new_size: int):
+        if self._enforcing_column_width:
+            return
+        min_width = self._minimum_column_widths.get(logical_index)
+        if min_width is None or new_size >= min_width:
+            return
+        self._enforcing_column_width = True
+        try:
+            self.setColumnWidth(logical_index, min_width)
+        finally:
+            self._enforcing_column_width = False
 
     def load_data(self, data: Item):
         self.setItem(0, ParamTableColumns.SLOPE.index, TableWidgetItem(str(data.slope)))

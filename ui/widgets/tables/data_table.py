@@ -102,6 +102,7 @@ class DataTable(TableMixin, QtWidgets.QTableWidget):
         self.setItemDelegateForColumn(DataTableColumns.RNS.index, RoundedDelegate(rounded=1, parent=self))
         self.setItemDelegateForColumn(DataTableColumns.SQUARE.index, RoundedDelegate(rounded=2, parent=self))
         self.setItemDelegateForColumn(DataTableColumns.RN_SQRT.index, RoundedDelegate(rounded=2, parent=self))
+        self.setItemDelegateForColumn(DataTableColumns.SAMPLE_AREA.index, RoundedDelegate(rounded=2, parent=self))
 
         self.setColumnHidden(DataTableColumns.DRIFT.index, True)
         self.setColumnHidden(DataTableColumns.RNS_ERROR.index, True)
