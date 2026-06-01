@@ -39,8 +39,11 @@ class CalculationService:
         self.s_custom2_widget = s_custom2_widget
         self.s_custom3_widget = s_custom3_widget
         self.planned_drift_widget = planned_drift_widget
+        self.has_invalid_approximation = False
 
     def calculate_results(self):
+        self.has_invalid_approximation = False
+        self.param_table.color_all(background_color=WHITE, text_color=BLACK)
         self.data_table.clear_calculations()
         if not self.calculate_rn05():
             return False
@@ -50,6 +53,8 @@ class CalculationService:
             return False
         if not self.calculate_error_params():
             return False
+        if self.has_invalid_approximation:
+            self.param_table.color_all(background_color=RNS_ERROR_COLOR, text_color=WHITE)
         return True
 
     def calculate_rn05(self):
@@ -76,6 +81,9 @@ class CalculationService:
             return False
 
         slope, intercept = linear_fit(diameter_list, rn_sqrt_list)
+        if slope < 0:
+            self.has_invalid_approximation = True
+            QtWidgets.QMessageBox.warning(None, "Предупреждение", "Проверьте корректность введённых значений!")
         self.param_table.setItem(0, ParamTableColumns.SLOPE.index, TableWidgetItem(str(slope)))
         self.param_table.setItem(0, ParamTableColumns.INTERCEPT.index, TableWidgetItem(str(intercept)))
 

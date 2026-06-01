@@ -2,7 +2,7 @@ import contextlib
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from domain.constants import ParamTableColumns
+from domain.constants import BLACK, RNS_ERROR_COLOR, WHITE, ParamTableColumns
 from domain.models import Item
 from ui.widgets.delegates import RnSErrorPercentDelegate, RoundedDelegate
 from ui.widgets.tables.item import TableWidgetItem
@@ -93,6 +93,15 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
     def clear_all(self):
         for col in range(self.columnCount()):
             self.setItem(0, col, TableWidgetItem(""))
+        self.color_all(background_color=WHITE, text_color=BLACK)
+
+    def color_all(self, background_color, text_color):
+        for row in range(self.rowCount()):
+            for col in range(self.columnCount()):
+                item = self.item(row, col)
+                if item:
+                    item.setBackground(QtGui.QBrush(QtGui.QColor(background_color)))
+                    item.setForeground(QtGui.QBrush(QtGui.QColor(text_color)))
 
     def _apply_initial_column_widths(self):
         header_metrics = QtGui.QFontMetrics(self.horizontalHeader().font())
@@ -166,6 +175,14 @@ class ParamTable(TableMixin, QtWidgets.QTableWidget):
                 ParamTableColumns.S_REAL_CUSTOM3.index,
                 TableWidgetItem(str(data.s_real_custom3)),
             )
+        try:
+            has_invalid_approximation = float(data.slope) < 0
+        except Exception:
+            has_invalid_approximation = False
+        if has_invalid_approximation:
+            self.color_all(background_color=RNS_ERROR_COLOR, text_color=WHITE)
+        else:
+            self.color_all(background_color=WHITE, text_color=BLACK)
 
     def is_empty(self):
         # Consider the table non-empty if key computed fields are present.
