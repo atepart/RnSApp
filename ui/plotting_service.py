@@ -14,6 +14,14 @@ class PlotService:
         self.data_table = data_table
         self.param_table = param_table
 
+    @staticmethod
+    def _cell_plot_names(item):
+        return {item.name, f"{item.name} (fit)", f"{item.name} (data)"}
+
+    @staticmethod
+    def _mark_cell_plot_item(plot_item, cell: int):
+        setattr(plot_item, "_rns_cell", cell)
+
     def prepare_plot(self):
         y_label = "1/√Rₙ"
         x_label = "Диаметр ACAD (μm)"
@@ -99,8 +107,11 @@ class PlotService:
     def plot_cell(self, cell: int, repo):
         item = repo.get(cell=cell)
         if not item:
-            return
-        diameter, rn_sqrt = drop_nans(item.diameter_list, item.rn_sqrt_list)
+            return False
+        try:
+            diameter, rn_sqrt = drop_nans(item.diameter_list, item.rn_sqrt_list)
+        except Exception:
+            diameter, rn_sqrt = np.array([], dtype=float), np.array([], dtype=float)
         # Fallback: rebuild series from initial_data selection if stored lists are empty
         if diameter.size == 0:
             try:
@@ -115,9 +126,9 @@ class PlotService:
                 ]
                 diameter, rn_sqrt = drop_nans(diam_list, rn_list)
             except Exception:
-                return
+                return False
         if diameter.size == 0:
-            return
+            return False
 
         # Sort by diameter for better visuals
         try:
@@ -131,28 +142,39 @@ class PlotService:
 
         # Prepare fit x range to include drift
         fit_x = list(diameter_sorted)
-        with np.errstate(all="ignore"):
-            if len(fit_x):
-                if np.min(fit_x) > item.drift:
-                    fit_x.insert(0, item.drift)
-                if np.max(fit_x) < item.drift:
-                    fit_x.append(item.drift)
-        y_appr = np.vectorize(lambda x: linear(x, item.slope, item.intercept))(fit_x)
+        can_plot_fit = False
+        y_appr = []
+        try:
+            slope = float(item.slope)
+            intercept = float(item.intercept)
+            drift = float(item.drift)
+            can_plot_fit = np.isfinite(slope) and np.isfinite(intercept) and np.isfinite(drift) and len(fit_x) > 0
+        except Exception:
+            can_plot_fit = False
+        if can_plot_fit:
+            with np.errstate(all="ignore"):
+                if np.min(fit_x) > drift:
+                    fit_x.insert(0, drift)
+                if np.max(fit_x) < drift:
+                    fit_x.append(drift)
+                y_appr = np.vectorize(lambda x: linear(x, slope, intercept))(fit_x)
 
         # Color by cell number
-        color = PLOT_COLORS[cell - 1]
+        color = PLOT_COLORS[(cell - 1) % len(PLOT_COLORS)]
         pen = pg.mkPen(color=color, width=3)
 
         # Remove previous items for this cell (data and fit) if exist
         plotItem = self.plot.getPlotItem()
         to_remove = [
-            it for it in plotItem.items if it.name() in {f"{item.name}", f"{item.name} (fit)", f"{item.name} (data)"}
+            it
+            for it in plotItem.items
+            if getattr(it, "_rns_cell", None) == cell or it.name() in self._cell_plot_names(item)
         ]
         for it in to_remove:
             plotItem.removeItem(it)
 
         # Plot scatter points for data (same color, no legend clutter)
-        self.plot.plot(
+        data_item = self.plot.plot(
             diameter_sorted,
             rn_sqrt_sorted,
             name=f"{item.name} (data)",
@@ -162,22 +184,28 @@ class PlotService:
             symbolBrush=color,
             symbolPen=pen,
         )
+        self._mark_cell_plot_item(data_item, cell)
 
         # Plot fit line for this cell
-        self.plot.plot(
-            fit_x,
-            y_appr,
-            name=f"{item.name}",
-            pen=pen,
-            symbol=None,
-        )
+        if can_plot_fit:
+            fit_item = self.plot.plot(
+                fit_x,
+                y_appr,
+                name=f"{item.name}",
+                pen=pen,
+                symbol=None,
+            )
+            self._mark_cell_plot_item(fit_item, cell)
+        return True
 
     def remove_cell_plot(self, cell: int, store):
         cell_data = store.get(cell=cell)
         plotItem = self.plot.getPlotItem()
         target_names = set()
         if cell_data:
-            target_names = {cell_data.name, f"{cell_data.name} (fit)", f"{cell_data.name} (data)"}
-        items_to_remove = [item for item in plotItem.items if item.name() in target_names]
+            target_names = self._cell_plot_names(cell_data)
+        items_to_remove = [
+            item for item in plotItem.items if getattr(item, "_rns_cell", None) == cell or item.name() in target_names
+        ]
         for item in items_to_remove:
             plotItem.removeItem(item)

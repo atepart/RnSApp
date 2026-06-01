@@ -117,9 +117,13 @@ class CellWidget(QtWidgets.QGroupBox):
             self.app.addCellData(cell=self.index, name=self.name.text())
             cell_data = self.app.repo.get(cell=self.index)
         if state == QtCore.Qt.CheckState.Checked.value:
-            self.app.plot_data(self.index)
+            is_plotted = bool(self.app.plot_data(self.index))
             if cell_data:
-                cell_data.is_plot = True
+                cell_data.is_plot = is_plotted
+            if not is_plotted:
+                blocker = QtCore.QSignalBlocker(self.checkbox)
+                self.checkbox.setChecked(False)
+                del blocker
         else:
             self.app.remove_plot(self.index)
             if cell_data:
@@ -151,7 +155,12 @@ class CellWidget(QtWidgets.QGroupBox):
             self.app.remove_plot(cell=self.index)
             cell_data = self.app.repo.update_or_create_item(cell=self.index, name=name)
             if cell_data.is_plot:
-                self.app.plot_data(cell=self.index)
+                is_plotted = bool(self.app.plot_data(cell=self.index))
+                cell_data.is_plot = is_plotted
+                if not is_plotted:
+                    blocker = QtCore.QSignalBlocker(self.checkbox)
+                    self.checkbox.setChecked(False)
+                    del blocker
 
     def openRewriteDataDialog(self):
         dialog = QtWidgets.QDialog(self)

@@ -689,7 +689,7 @@ class RnSApp(QtWidgets.QMainWindow):
         return self.plot_service.plot_current_data()
 
     def addCellData(self, cell: int, name: str):
-        self.repo.update_or_create_item(
+        cell_data = self.repo.update_or_create_item(
             cell=cell,
             name=name,
             diameter_list=self.data_table.get_column_values(DataTableColumns.DIAMETER),
@@ -717,6 +717,15 @@ class RnSApp(QtWidgets.QMainWindow):
         # After saving, clear dirty indicator for this cell
         with contextlib.suppress(Exception):
             self.cell_widgets[cell - 1].set_dirty(False)
+        with contextlib.suppress(Exception):
+            if self.cell_widgets[cell - 1].checkbox.isChecked():
+                self.remove_plot(cell)
+                is_plotted = bool(self.plot_data(cell))
+                cell_data.is_plot = is_plotted
+                if not is_plotted:
+                    blocker = QtCore.QSignalBlocker(self.cell_widgets[cell - 1].checkbox)
+                    self.cell_widgets[cell - 1].checkbox.setChecked(False)
+                    del blocker
 
     # ---- Helpers to detect unsaved changes for active cell ----
     def _param_table_snapshot(self) -> dict:
@@ -797,7 +806,16 @@ class RnSApp(QtWidgets.QMainWindow):
         self.param_table.clear_all()
         self.plot.clear()
         self.plot_service.prepare_plot()
+        self._clear_plot_checkboxes()
         self.set_active_cell(0)
+
+    def _clear_plot_checkboxes(self):
+        for cell_widget in self.cell_widgets:
+            blocker = QtCore.QSignalBlocker(cell_widget.checkbox)
+            cell_widget.checkbox.setChecked(False)
+            del blocker
+        for cell_data in self.repo:
+            cell_data.is_plot = False
 
     @staticmethod
     def parse_cell(cell):
