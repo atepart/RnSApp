@@ -6,7 +6,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QAction, QDesktopServices, QIcon
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
@@ -543,10 +543,10 @@ class RnSApp(QtWidgets.QMainWindow):
         if not getattr(selected, "asset", None) or not selected.asset.download_url:
             QtWidgets.QMessageBox.information(self, "Нет файла", "В выбранном релизе нет файла для вашей платформы.")
             return
-        # Только выводим ссылку на скачивание (без автоматической загрузки)
+        # Начинаем автоматическое скачивание и обновление
         url = selected.asset.download_url
         logger.info(f"Selected release: {selected.tag}, asset: {url}")
-        self._show_download_link(url)
+        self._start_download_update(url)
 
     @QtCore.Slot(str)
     def _on_update_fetch_error(self, msg: str):
@@ -598,44 +598,116 @@ class RnSApp(QtWidgets.QMainWindow):
             window.close()
         super().closeEvent(event)
 
-    def _show_download_link(self, url: str):
-        dlg = QtWidgets.QDialog(self)
-        dlg.setWindowTitle("Загрузка обновления")
-        dlg.resize(620, 180)
-        layout = QtWidgets.QVBoxLayout(dlg)
+    def _start_download_update(self, url: str):
+        from ui.update_dialogs import DownloadReleaseWorker
 
-        info = QtWidgets.QLabel("Ссылка на релиз. Нажмите, чтобы открыть в браузере, или скопируйте.")
-        info.setWordWrap(True)
-        layout.addWidget(info)
+        self._download_progress_dlg = QtWidgets.QProgressDialog("Скачивание обновления...", "Отмена", 0, 100, self)
+        self._download_progress_dlg.setWindowTitle("Обновление")
+        self._download_progress_dlg.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+        self._download_progress_dlg.setMinimumDuration(0)
+        self._download_progress_dlg.setValue(0)
 
-        link = QtWidgets.QLabel(f'<a href="{url}">{url}</a>')
-        link.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
-        link.setOpenExternalLinks(True)
-        layout.addWidget(link)
+        self._download_thread = QtCore.QThread(self)
+        self._download_worker = DownloadReleaseWorker(url)
+        self._download_worker.moveToThread(self._download_thread)
 
-        btns = QtWidgets.QHBoxLayout()
-        btn_copy = QtWidgets.QPushButton("Скопировать ссылку")
-        btn_open = QtWidgets.QPushButton("Открыть в браузере")
-        btn_close = QtWidgets.QPushButton("Закрыть")
-        btns.addWidget(btn_copy)
-        btns.addWidget(btn_open)
-        btns.addStretch(1)
-        btns.addWidget(btn_close)
-        layout.addLayout(btns)
+        self._download_thread.started.connect(self._download_worker.run)
 
-        def copy_link():
-            cb = QApplication.clipboard()
-            if cb:
-                cb.setText(url)
+        self._download_worker.progress.connect(self._on_download_progress)
+        self._download_worker.status.connect(self._download_progress_dlg.setLabelText)
+        self._download_worker.finished.connect(self._on_download_finished)
+        self._download_worker.error.connect(self._on_download_error)
 
-        def open_link():
-            QDesktopServices.openUrl(QtCore.QUrl(url))
+        self._download_progress_dlg.canceled.connect(self._cancel_download)
 
-        btn_copy.clicked.connect(copy_link)
-        btn_open.clicked.connect(open_link)
-        btn_close.clicked.connect(dlg.accept)
+        self._download_thread.start()
 
-        dlg.exec()
+    @QtCore.Slot(int, int)
+    def _on_download_progress(self, downloaded: int, total: int):
+        if total > 0:
+            percent = int((downloaded / total) * 100)
+            self._download_progress_dlg.setValue(percent)
+
+    @QtCore.Slot(str)
+    def _on_download_finished(self, src_dir: str):
+        self._cleanup_download_thread()
+        self._download_progress_dlg.close()
+
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Обновление готово",
+            "Обновление скачано и готово к установке. Приложение будет перезапущено.\n\nПродолжить?",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            self._apply_update(src_dir)
+
+    @QtCore.Slot(str)
+    def _on_download_error(self, msg: str):
+        self._cleanup_download_thread()
+        self._download_progress_dlg.close()
+        QtWidgets.QMessageBox.critical(self, "Ошибка скачивания", f"Не удалось скачать обновление: {msg}")
+
+    def _cancel_download(self):
+        self._cleanup_download_thread(wait=True)
+
+    def _cleanup_download_thread(self, wait: bool = False):
+        thread = getattr(self, "_download_thread", None)
+        if thread and thread.isRunning():
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                thread.requestInterruption()
+                thread.quit()
+                if wait:
+                    thread.wait(3000)
+        self._download_thread = None
+        self._download_worker = None
+
+    def _apply_update(self, src_dir: str):
+        import os
+        import subprocess
+        import sys
+
+        app_exe = sys.executable
+
+        if getattr(sys, "frozen", False):
+            install_dir = os.path.dirname(app_exe)
+            if sys.platform == "darwin" and "/Contents/MacOS" in app_exe:
+                install_dir = os.path.dirname(os.path.dirname(os.path.dirname(app_exe)))
+                app_exe = install_dir
+        else:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Внимание",
+                "Автообновление доступно только в скомпилированной версии. Файлы скачаны во временную папку.",
+            )
+            logger.info(f"Update downloaded to: {src_dir}")
+            return
+
+        updater_exe_name = "updater" if sys.platform == "darwin" else "updater.exe"
+        if sys.platform == "darwin" and "/Contents/MacOS" in sys.executable:
+            updater_exe_path = os.path.join(os.path.dirname(sys.executable), updater_exe_name)
+        else:
+            updater_exe_path = os.path.join(install_dir, updater_exe_name)
+
+        if not os.path.exists(updater_exe_path):
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Ошибка",
+                f"Файл {updater_exe_name} не найден по пути:\n{updater_exe_path}\nНевозможно установить обновление.",
+            )
+            return
+
+        pid = os.getpid()
+
+        cmd = [updater_exe_path, "--pid", str(pid), "--src", src_dir, "--dst", install_dir, "--exe", app_exe]
+        try:
+            logger.info(f"Starting updater: {cmd}")
+            subprocess.Popen(cmd)
+            self.close()
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось запустить updater: {e}")
 
     def calculate_means(self):
         rns_list = []

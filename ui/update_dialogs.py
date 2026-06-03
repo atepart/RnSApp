@@ -1,8 +1,62 @@
 from __future__ import annotations
 
+import os
+import tempfile
+import zipfile
+
+import requests
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from infrastructure.updater import list_releases
+
+
+class DownloadReleaseWorker(QtCore.QObject):
+    finished = QtCore.Signal(str)  # Returns path to extracted source directory
+    error = QtCore.Signal(str)
+    progress = QtCore.Signal(int, int)  # downloaded, total
+    status = QtCore.Signal(str)
+
+    def __init__(self, url: str) -> None:
+        super().__init__()
+        self._url = url
+
+    @QtCore.Slot()
+    def run(self):
+        try:
+            self.status.emit("Скачивание обновления...")
+            resp = requests.get(self._url, stream=True, timeout=10)
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0))
+
+            temp_dir = tempfile.mkdtemp(prefix="rnsapp_update_")
+            zip_path = os.path.join(temp_dir, "update.zip")
+
+            downloaded = 0
+            with open(zip_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            self.progress.emit(downloaded, total)
+
+            self.status.emit("Распаковка обновления...")
+            extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+
+            # Find the root of the app in the extracted folder
+            # The zip usually contains a single top-level folder 'RnSApp' or 'RnSApp.app'
+            items = os.listdir(extract_dir)
+            if len(items) == 1 and os.path.isdir(os.path.join(extract_dir, items[0])):
+                src_dir = os.path.join(extract_dir, items[0])
+            else:
+                src_dir = extract_dir
+
+            self.finished.emit(src_dir)
+        except Exception as e:
+            self.error.emit(str(e))
 
 
 class FetchReleasesWorker(QtCore.QObject):
