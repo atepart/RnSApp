@@ -152,9 +152,13 @@ class ReleasePickerDialog(QtWidgets.QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Cancel)
         self.detail_btn = btns.addButton("Подробнее", QtWidgets.QDialogButtonBox.ActionRole)
+        self.manual_btn = btns.addButton("Скачать вручную", QtWidgets.QDialogButtonBox.ActionRole)
+        self.auto_btn = btns.addButton("Обновить автоматически", QtWidgets.QDialogButtonBox.AcceptRole)
+
         self.detail_btn.clicked.connect(self._open_detail)
+        self.manual_btn.clicked.connect(self._on_manual)
         btns.accepted.connect(self._on_accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
@@ -196,13 +200,25 @@ class ReleasePickerDialog(QtWidgets.QDialog):
         self.selected = item.data(QtCore.Qt.UserRole)
         self.accept()
 
+    def _on_manual(self):
+        item = self.listw.currentItem()
+        if not item or not (item.flags() & QtCore.Qt.ItemIsEnabled):
+            return
+        self.selected = item.data(QtCore.Qt.UserRole)
+        self.done(QtWidgets.QDialog.DialogCode.Accepted + 1)  # Custom return code for manual
+
     def _on_selection_changed(self, current, previous):
         release = current.data(QtCore.Qt.UserRole) if current else None
         if release is None:
             self.desc.setPlainText("")
             self.detail_btn.setEnabled(False)
+            self.manual_btn.setEnabled(False)
+            self.auto_btn.setEnabled(False)
             return
-        self.detail_btn.setEnabled(bool(current.flags() & QtCore.Qt.ItemIsEnabled))
+        has_asset = bool(current.flags() & QtCore.Qt.ItemIsEnabled)
+        self.detail_btn.setEnabled(has_asset)
+        self.manual_btn.setEnabled(has_asset)
+        self.auto_btn.setEnabled(has_asset)
         body = getattr(release, "body", "") or "Описание отсутствует."
         self.desc.setPlainText(body)
         self.desc.moveCursor(QtGui.QTextCursor.Start)

@@ -537,16 +537,24 @@ class RnSApp(QtWidgets.QMainWindow):
 
         # Show picker dialog on main thread
         dlg = ReleasePickerDialog(releases, parent=self, current_version=__version__)
-        if dlg.exec() != QtWidgets.QDialog.Accepted or not dlg.selected:
+        res = dlg.exec()
+        if res == QtWidgets.QDialog.DialogCode.Rejected or not dlg.selected:
             return
+
         selected = dlg.selected
         if not getattr(selected, "asset", None) or not selected.asset.download_url:
             QtWidgets.QMessageBox.information(self, "Нет файла", "В выбранном релизе нет файла для вашей платформы.")
             return
-        # Начинаем автоматическое скачивание и обновление
+
         url = selected.asset.download_url
         logger.info(f"Selected release: {selected.tag}, asset: {url}")
-        self._start_download_update(url)
+
+        if res == QtWidgets.QDialog.DialogCode.Accepted + 1:
+            # Manual download
+            QDesktopServices.openUrl(QtCore.QUrl(url))
+        else:
+            # Начинаем автоматическое скачивание и обновление
+            self._start_download_update(url)
 
     @QtCore.Slot(str)
     def _on_update_fetch_error(self, msg: str):
@@ -622,11 +630,16 @@ class RnSApp(QtWidgets.QMainWindow):
 
         self._download_thread.start()
 
-    @QtCore.Slot(int, int)
-    def _on_download_progress(self, downloaded: int, total: int):
+    @QtCore.Slot(int, int, float)
+    def _on_download_progress(self, downloaded: int, total: int, speed_mbps: float):
         if total > 0:
             percent = int((downloaded / total) * 100)
             self._download_progress_dlg.setValue(percent)
+            dl_mb = downloaded / 1024 / 1024
+            tot_mb = total / 1024 / 1024
+            self._download_progress_dlg.setLabelText(
+                f"Скачивание обновления... {dl_mb:.1f} / {tot_mb:.1f} МБ ({speed_mbps:.1f} МБ/с)"
+            )
 
     @QtCore.Slot(str)
     def _on_download_finished(self, src_dir: str):
@@ -666,8 +679,10 @@ class RnSApp(QtWidgets.QMainWindow):
 
     def _apply_update(self, src_dir: str):
         import os
+        import shutil
         import subprocess
         import sys
+        import tempfile
 
         app_exe = sys.executable
 
@@ -701,9 +716,21 @@ class RnSApp(QtWidgets.QMainWindow):
 
         pid = os.getpid()
 
-        cmd = [updater_exe_path, "--pid", str(pid), "--src", src_dir, "--dst", install_dir, "--exe", app_exe]
+        # Copy updater to a temp directory so it doesn't lock the installation folder (crucial for macOS .app bundles)
+        temp_dir = tempfile.mkdtemp(prefix="rnsapp_updater_run_")
+        temp_updater_path = os.path.join(temp_dir, updater_exe_name)
+
         try:
-            logger.info(f"Starting updater: {cmd}")
+            shutil.copy2(updater_exe_path, temp_updater_path)
+            # Ensure it is executable
+            os.chmod(temp_updater_path, 0o755)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Ошибка", f"Не удалось скопировать updater: {e}")
+            return
+
+        cmd = [temp_updater_path, "--pid", str(pid), "--src", src_dir, "--dst", install_dir, "--exe", app_exe]
+        try:
+            logger.info(f"Starting updater from temp location: {cmd}")
             subprocess.Popen(cmd)
             self.close()
         except Exception as e:

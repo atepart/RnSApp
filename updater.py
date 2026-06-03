@@ -8,7 +8,16 @@ import time
 
 
 def setup_logger(install_dir: str):
-    log_file = os.path.join(install_dir, "updater.log")
+    # Try to write log next to the updater or in temp if permission denied
+    try:
+        log_file = os.path.join(install_dir, "updater.log")
+        with open(log_file, "a"):
+            pass
+    except Exception:
+        import tempfile
+
+        log_file = os.path.join(tempfile.gettempdir(), "rnsapp_updater.log")
+
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -65,7 +74,14 @@ try:
 
                 time.sleep(1)
 
-                # 2. Copy files
+                # 2. Clean old app if it's a macOS bundle to prevent bloat
+                self.status.emit("Удаление старой версии...")
+                if sys.platform == "darwin" and self.dst_dir.endswith(".app"):
+                    if os.path.exists(self.dst_dir):
+                        logging.info(f"Удаление старого бандла {self.dst_dir}")
+                        shutil.rmtree(self.dst_dir, ignore_errors=True)
+
+                # 3. Copy files
                 self.status.emit("Подсчет файлов...")
                 total_files = count_files(self.src_dir, self.exclude_names)
                 copied_files = 0
@@ -73,8 +89,20 @@ try:
                 self.status.emit("Копирование файлов...")
                 self._copy_tree(self.src_dir, self.dst_dir, total_files, [copied_files])
 
-                # 3. Start app
+                # 4. Start app
                 self.status.emit("Запуск обновленного приложения...")
+
+                # Make sure executable has x bit on Mac/Linux
+                if sys.platform != "win32":
+                    if self.exe_path.endswith(".app"):
+                        binary_name = os.path.splitext(os.path.basename(self.exe_path))[0]
+                        bin_path = os.path.join(self.exe_path, "Contents", "MacOS", binary_name)
+                        if os.path.exists(bin_path):
+                            os.chmod(bin_path, 0o755)
+                    else:
+                        if os.path.exists(self.exe_path):
+                            os.chmod(self.exe_path, 0o755)
+
                 if os.path.exists(self.exe_path):
                     if sys.platform == "darwin" and self.exe_path.endswith(".app"):
                         subprocess.Popen(["open", self.exe_path])
@@ -89,6 +117,9 @@ try:
                 self.finished.emit(False, str(e))
 
         def _copy_tree(self, src: str, dst: str, total: int, copied: list[int]):
+            if not os.path.exists(dst):
+                os.makedirs(dst)
+
             for item in os.listdir(src):
                 if item in self.exclude_names:
                     continue
@@ -97,8 +128,6 @@ try:
                 d = os.path.join(dst, item)
 
                 if os.path.isdir(s):
-                    if not os.path.exists(d):
-                        os.makedirs(d)
                     self._copy_tree(s, d, total, copied)
                 else:
                     max_retries = 5
@@ -171,7 +200,13 @@ except ImportError:
 
         time.sleep(1)
 
-        # 2. Copy files
+        # 2. Clean old app if it's a macOS bundle
+        if sys.platform == "darwin" and args.dst.endswith(".app"):
+            if os.path.exists(args.dst):
+                logging.info(f"Удаление старого бандла {args.dst}")
+                shutil.rmtree(args.dst, ignore_errors=True)
+
+        # 3. Copy files
         updater_exe_name = os.path.basename(sys.executable)
         exclude_names = {updater_exe_name, "updater.log", "updater", "updater.exe"}
 
@@ -179,6 +214,9 @@ except ImportError:
             logging.info("Начало копирования файлов...")
 
             def copy_tree_cli(src_dir: str, dst_dir: str):
+                if not os.path.exists(dst_dir):
+                    os.makedirs(dst_dir)
+
                 for item in os.listdir(src_dir):
                     if item in exclude_names:
                         continue
@@ -187,8 +225,6 @@ except ImportError:
                     d = os.path.join(dst_dir, item)
 
                     if os.path.isdir(s):
-                        if not os.path.exists(d):
-                            os.makedirs(d)
                         copy_tree_cli(s, d)
                     else:
                         max_retries = 5
@@ -206,7 +242,17 @@ except ImportError:
             copy_tree_cli(args.src, args.dst)
             logging.info("Копирование успешно завершено.")
 
-            # 3. Start the new app
+            # 4. Start the new app
+            if sys.platform != "win32":
+                if args.exe.endswith(".app"):
+                    binary_name = os.path.splitext(os.path.basename(args.exe))[0]
+                    bin_path = os.path.join(args.exe, "Contents", "MacOS", binary_name)
+                    if os.path.exists(bin_path):
+                        os.chmod(bin_path, 0o755)
+                else:
+                    if os.path.exists(args.exe):
+                        os.chmod(args.exe, 0o755)
+
             if os.path.exists(args.exe):
                 logging.info(f"Запуск обновленного приложения: {args.exe}")
                 if sys.platform == "darwin" and args.exe.endswith(".app"):
