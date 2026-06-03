@@ -628,6 +628,7 @@ class RnSApp(QtWidgets.QMainWindow):
 
         self._download_progress_dlg.canceled.connect(self._cancel_download)
 
+        self._download_progress_dlg.show()
         self._download_thread.start()
 
     @QtCore.Slot(int, int, float)

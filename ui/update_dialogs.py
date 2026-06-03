@@ -13,7 +13,7 @@ from infrastructure.updater import list_releases
 class DownloadReleaseWorker(QtCore.QObject):
     finished = QtCore.Signal(str)  # Returns path to extracted source directory
     error = QtCore.Signal(str)
-    progress = QtCore.Signal(int, int)  # downloaded, total
+    progress = QtCore.Signal(int, int, float)  # downloaded, total, speed_mbps
     status = QtCore.Signal(str)
 
     def __init__(self, url: str) -> None:
@@ -22,6 +22,8 @@ class DownloadReleaseWorker(QtCore.QObject):
 
     @QtCore.Slot()
     def run(self):
+        import time
+
         try:
             self.status.emit("Скачивание обновления...")
             resp = requests.get(self._url, stream=True, timeout=10)
@@ -32,22 +34,36 @@ class DownloadReleaseWorker(QtCore.QObject):
             zip_path = os.path.join(temp_dir, "update.zip")
 
             downloaded = 0
+            start_time = time.time()
+            last_emit_time = start_time
+
             with open(zip_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
+                # 128KB chunk for faster download
+                for chunk in resp.iter_content(chunk_size=131072):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total:
-                            self.progress.emit(downloaded, total)
+                        now = time.time()
+                        # Update progress every ~0.1s
+                        if (now - last_emit_time > 0.1) or (total > 0 and downloaded >= total):
+                            elapsed = now - start_time
+                            speed_mbps = (downloaded / 1024 / 1024) / elapsed if elapsed > 0 else 0
+                            self.progress.emit(downloaded, total, speed_mbps)
+                            last_emit_time = now
 
             self.status.emit("Распаковка обновления...")
             extract_dir = os.path.join(temp_dir, "extracted")
             os.makedirs(extract_dir, exist_ok=True)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(extract_dir)
+                # Restore permissions for executable files (specifically for macOS .app bundles)
+                for info in zf.infolist():
+                    extracted_path = os.path.join(extract_dir, info.filename)
+                    mode = info.external_attr >> 16
+                    if mode:
+                        os.chmod(extracted_path, mode)
 
             # Find the root of the app in the extracted folder
-            # The zip usually contains a single top-level folder 'RnSApp' or 'RnSApp.app'
             items = os.listdir(extract_dir)
             if len(items) == 1 and os.path.isdir(os.path.join(extract_dir, items[0])):
                 src_dir = os.path.join(extract_dir, items[0])
