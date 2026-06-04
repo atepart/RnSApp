@@ -40,6 +40,8 @@ class DownloadReleaseWorker(QtCore.QObject):
             with open(zip_path, "wb") as f:
                 # 128KB chunk for faster download
                 for chunk in resp.iter_content(chunk_size=131072):
+                    if QtCore.QThread.currentThread().isInterruptionRequested():
+                        return
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -50,6 +52,9 @@ class DownloadReleaseWorker(QtCore.QObject):
                             speed_mbps = (downloaded / 1024 / 1024) / elapsed if elapsed > 0 else 0
                             self.progress.emit(downloaded, total, speed_mbps)
                             last_emit_time = now
+
+            if QtCore.QThread.currentThread().isInterruptionRequested():
+                return
 
             self.status.emit("Распаковка обновления...")
             extract_dir = os.path.join(temp_dir, "extracted")

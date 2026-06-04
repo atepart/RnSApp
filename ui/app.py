@@ -6,7 +6,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QSettings
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QDesktopServices, QIcon
 from PySide6.QtWidgets import QApplication
 from PySide6QtAds import CDockManager, CDockWidget, DockWidgetArea
 
