@@ -8,7 +8,7 @@ from PySide6 import QtCore, QtWidgets
 
 from infrastructure.repository_memory import InMemoryCellRepository
 from infrastructure.xlsx_io import XlsxCellIO
-from ui.app import CURRENT_DOCK_LAYOUT_VERSION, RnSApp
+from ui.app import RnSApp
 
 
 class DefaultDockLayoutTests(unittest.TestCase):
@@ -66,18 +66,28 @@ class DefaultDockLayoutTests(unittest.TestCase):
         assert len(root_sizes) == 2
         assert root_sizes[1] > root_sizes[0]
 
-    def test_old_layout_version_is_ignored_and_current_version_is_saved(self):
+    def test_saved_layout_is_restored_regardless_of_legacy_version(self):
+        self.window.inputs_dock.toggleView(False)
+        self.app.processEvents()
+        saved_state = self.window.dock_manager.saveState()
+        self.window.inputs_dock.toggleView(True)
+        self.app.processEvents()
+        assert not self.window.inputs_dock.isClosed()
+
         settings = QtCore.QSettings()
         settings.beginGroup("DockManager")
-        settings.setValue("layout_version", CURRENT_DOCK_LAYOUT_VERSION - 1)
-        settings.setValue("state", b"obsolete-state")
+        settings.setValue("layout_version", 1)
+        settings.setValue("state", saved_state)
         settings.endGroup()
 
-        assert not self.window.restore_settings()
+        assert self.window.restore_settings()
+        self.app.processEvents()
+        assert self.window.inputs_dock.isClosed()
+
         self.window.save_settings()
         settings.beginGroup("DockManager")
-        assert settings.value("layout_version", type=int) == CURRENT_DOCK_LAYOUT_VERSION
         assert settings.value("state")
+        assert settings.value("layout_version") is None
         settings.endGroup()
 
     def test_restore_default_layout_shows_all_panels(self):

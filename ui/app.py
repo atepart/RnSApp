@@ -22,7 +22,6 @@ from ui.update_dialogs import FetchReleasesWorker, ReleasePickerDialog
 from ui.widgets import CellWidget, DataTable, ParamTable
 
 logger = logging.getLogger(__name__)
-CURRENT_DOCK_LAYOUT_VERSION = 3
 
 
 class RnSApp(QtWidgets.QMainWindow):
@@ -439,7 +438,7 @@ class RnSApp(QtWidgets.QMainWindow):
         settings.beginGroup("DockManager")
         with contextlib.suppress(Exception):
             settings.setValue("state", self.dock_manager.saveState())
-            settings.setValue("layout_version", CURRENT_DOCK_LAYOUT_VERSION)
+            settings.remove("layout_version")
 
         settings.endGroup()
 
@@ -460,9 +459,8 @@ class RnSApp(QtWidgets.QMainWindow):
 
         settings.beginGroup("DockManager")
         state = settings.value("state")
-        layout_version = settings.value("layout_version", 0, type=int)
         restored_layout = False
-        if state and layout_version == CURRENT_DOCK_LAYOUT_VERSION:
+        if state:
             with contextlib.suppress(Exception):
                 restored_layout = bool(self.dock_manager.restoreState(state))
         settings.endGroup()
