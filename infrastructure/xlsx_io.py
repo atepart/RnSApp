@@ -8,7 +8,6 @@ from openpyxl.chart import Reference, ScatterChart, Series
 from openpyxl.chart.axis import ChartLines
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
-from openpyxl.chart.trendline import Trendline
 from openpyxl.drawing.line import LineProperties
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.styles import Alignment, Border, Font, Side
@@ -25,7 +24,7 @@ from domain.utils import (
     calculate_rns_over_rn,
     calculate_rns_per_sample,
     drop_nans,
-    linear_fit,
+    inverse_diameter_linear_fit,
 )
 
 
@@ -117,6 +116,7 @@ MEAN_EXCLUDED_HEADER = "Не учитывать"
 MEAN_EXCLUDED_ATTR = "mean_excluded"
 SAMPLE_SIZE_INPUT_MODE_HEADER = "Режим ввода размера"
 SAMPLE_SIZE_INPUT_MODE_ATTR = "sample_size_input_mode"
+WEIGHT_HEADER = "Вес (1/D)"
 
 
 def _sanitize_title_component(text: str) -> str:
@@ -233,6 +233,12 @@ class XlsxCellIO(CellDataIO):
                 hcell.border = Border(bottom=Side(style="medium"))
                 hcell.alignment = Alignment(horizontal="center", vertical="center")
 
+            weight_col_idx = len(export_data_columns) + 1
+            weight_header = ws.cell(row=1, column=weight_col_idx, value=WEIGHT_HEADER)
+            weight_header.font = Font(bold=True)
+            weight_header.border = Border(bottom=Side(style="medium"))
+            weight_header.alignment = Alignment(horizontal="center", vertical="center")
+
             # Write data values from InitialDataItemList
             # Determine how many rows are present in initial data
             max_row_index = 0
@@ -263,7 +269,7 @@ class XlsxCellIO(CellDataIO):
                         c.number_format = "0.000"
 
             # Results header placed to the right with a gap column
-            results_start_col = len(export_data_columns) + 2
+            results_start_col = weight_col_idx + 2
             for i, param in enumerate(results_params, start=0):
                 hcell = ws.cell(row=1, column=results_start_col + i, value=param.name)
                 hcell.font = Font(bold=True)
@@ -316,6 +322,7 @@ class XlsxCellIO(CellDataIO):
 
             for col_idx in range(1, len(export_data_columns) + 1):
                 _autofit(col_idx)
+            _autofit(weight_col_idx)
             for i, _ in enumerate(results_params, start=0):
                 _autofit(results_start_col + i)
             _autofit(mean_excluded_col)
@@ -362,14 +369,11 @@ class XlsxCellIO(CellDataIO):
                         return False
                 diam_val = _nonzero_number(ws.cell(row=row, column=diameter_col_idx).value)
                 res_val = _nonzero_number(ws.cell(row=row, column=resistance_col_idx).value)
-                return diam_val is not None and res_val is not None
+                return diam_val is not None and diam_val > 0 and res_val is not None
 
-            data_max_row = 1
-            for r in range(2, max_row_index + 2):
-                if _row_has_selected_data(r):
-                    data_max_row = max(data_max_row, r)
-            if data_max_row < 2:
-                data_max_row = 2
+            # InitialDataItem rows are zero-based and are written with a +2
+            # offset, so the final table row is max_row_index + 2.
+            data_max_row = max(2, max_row_index + 2)
 
             slope_ref = result_ref(ParamTableColumns.SLOPE)
             intercept_ref = result_ref(ParamTableColumns.INTERCEPT)
@@ -391,19 +395,37 @@ class XlsxCellIO(CellDataIO):
                 if DataTableColumns.DIAMETER in data_col_letter
                 else None
             )
+            weight_range = f"{get_column_letter(weight_col_idx)}2:{get_column_letter(weight_col_idx)}{data_max_row}"
+
+            for row in range(2, data_max_row + 1):
+                diameter_ref = data_ref(DataTableColumns.DIAMETER, row)
+                selected_condition = "TRUE"
+                if select_col_idx:
+                    selected_condition = data_ref(DataTableColumns.SELECT, row)
+                weight_cell = ws.cell(row=row, column=weight_col_idx)
+                weight_cell.value = (
+                    f"=IF(AND({selected_condition},ISNUMBER({diameter_ref}),{diameter_ref}>0)," f'1/{diameter_ref},"")'
+                )
+                weight_cell.number_format = "0.000000"
 
             # Results formulas (slope/intercept/drift/RnS/errors/real areas) with IFERROR guards
             if rn_sqrt_range and diameter_range:
+                squared_weights = f"IFERROR({weight_range}^2,0)"
+                weight_sum = f"SUMPRODUCT({squared_weights})"
+                x_mean = f"SUMPRODUCT({squared_weights},{diameter_range})/{weight_sum}"
+                y_mean = f"SUMPRODUCT({squared_weights},{rn_sqrt_range})/{weight_sum}"
+                weighted_covariance = (
+                    f"SUMPRODUCT({squared_weights},({diameter_range}-{x_mean}),({rn_sqrt_range}-{y_mean}))"
+                )
+                weighted_x_variance = f"SUMPRODUCT({squared_weights},({diameter_range}-{x_mean})^2)"
                 slope_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.SLOPE])
                 slope_cell.value = (
-                    f'=IF(COUNT({rn_sqrt_range})<2,"",IFERROR(SLOPE({rn_sqrt_range},{diameter_range}),""))'
+                    f'=IF(COUNT({weight_range})<2,"",IFERROR({weighted_covariance}/{weighted_x_variance},""))'
                 )
                 slope_cell.number_format = "0.0000"
 
                 intercept_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.INTERCEPT])
-                intercept_cell.value = (
-                    f'=IF(COUNT({rn_sqrt_range})<2,"",IFERROR(INTERCEPT({rn_sqrt_range},{diameter_range}),""))'
-                )
+                intercept_cell.value = f'=IF(COUNT({weight_range})<2,"",IFERROR({y_mean}-{slope_ref}*{x_mean},""))'
                 intercept_cell.number_format = "0.0000"
 
             drift_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.DRIFT])
@@ -604,20 +626,11 @@ class XlsxCellIO(CellDataIO):
                     series.marker.graphicalProperties.line.solidFill = blue
                     if getattr(series.graphicalProperties, "line", None) is not None:
                         series.graphicalProperties.line.noFill = True
-                # Trendline: show equation only (no R^2); paint it RED
-                with contextlib.suppress(Exception):
-                    series.trendline = Trendline(trendlineType="linear", dispEq=True, dispRSqr=False)
-                    red = RED.lstrip("#").upper()
-                    try:
-                        series.trendline.graphicalProperties.line.solidFill = red
-                    except Exception:
-                        # Fallback property name in some versions
-                        series.trendline.spPr = GraphicalProperties(ln=LineProperties(solidFill=red))
-
                 chart.varyColors = False
                 chart.series.append(series)
 
-                # Ensure axis range includes x-intercept (drift); extend trendline via forecast to reach it
+                # Ensure axis range includes x-intercept (drift) and draw the same
+                # weighted fit as the application instead of Excel's unweighted trendline.
                 with contextlib.suppress(Exception):
                     drift = float(getattr(cell_data, "drift", 0.0))
                     x_vals: List[float] = []
@@ -626,18 +639,34 @@ class XlsxCellIO(CellDataIO):
                         if xv not in (None, ""):
                             x_vals.append(float(xv))
                     if x_vals:
-                        chart.x_axis.scaling.min = min(min(x_vals), drift)
-                        chart.x_axis.scaling.max = max(max(x_vals), drift)
-                        # Forecast distances measured along X units
-                        try:
-                            backward = max(0.0, min(x_vals) - drift)
-                            forward = max(0.0, drift - max(x_vals))
-                            if hasattr(series.trendline, "backward"):
-                                series.trendline.backward = round(backward, 2)
-                            if hasattr(series.trendline, "forward"):
-                                series.trendline.forward = round(forward, 2)
-                        except Exception:
-                            pass
+                        fit_min = min(min(x_vals), drift)
+                        fit_max = max(max(x_vals), drift)
+                        chart.x_axis.scaling.min = fit_min
+                        chart.x_axis.scaling.max = fit_max
+
+                        fit_x_col = mode_col + 1
+                        fit_y_col = mode_col + 2
+                        ws.cell(row=1, column=fit_x_col, value="_Weighted fit X")
+                        ws.cell(row=1, column=fit_y_col, value="_Weighted fit Y")
+                        ws.cell(row=2, column=fit_x_col, value=fit_min)
+                        ws.cell(row=3, column=fit_x_col, value=fit_max)
+                        for fit_row in (2, 3):
+                            fit_x_ref = f"{get_column_letter(fit_x_col)}{fit_row}"
+                            ws.cell(
+                                row=fit_row,
+                                column=fit_y_col,
+                                value=f"={slope_ref}*{fit_x_ref}+{intercept_ref}",
+                            )
+                        ws.column_dimensions[get_column_letter(fit_x_col)].hidden = True
+                        ws.column_dimensions[get_column_letter(fit_y_col)].hidden = True
+
+                        fit_x_values = Reference(ws, min_col=fit_x_col, min_row=2, max_row=3)
+                        fit_y_values = Reference(ws, min_col=fit_y_col, min_row=2, max_row=3)
+                        fit_series = Series(fit_y_values, fit_x_values, title="Fit (w=1/D)")
+                        fit_series.marker = Marker(symbol="none")
+                        red = RED.lstrip("#").upper()
+                        fit_series.graphicalProperties.line.solidFill = red
+                        chart.series.append(fit_series)
 
                 # Place chart under the results table and stretch to Q21
                 chart_anchor_row = 4
@@ -831,7 +860,7 @@ class XlsxCellIO(CellDataIO):
 
             if len(diam_arr) >= 2:
                 with contextlib.suppress(Exception):
-                    slope, intercept = linear_fit(diam_arr, rn_arr)
+                    slope, intercept = inverse_diameter_linear_fit(diam_arr, rn_arr)
             if _is_nan(slope):
                 slope = 0.0
             if _is_nan(intercept):

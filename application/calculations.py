@@ -14,7 +14,7 @@ from domain.utils import (
     calculate_rns_over_rn,
     calculate_rns_per_sample,
     drop_nans,
-    linear_fit,
+    inverse_diameter_linear_fit,
 )
 from ui.widgets import TableWidgetItem
 
@@ -80,7 +80,15 @@ class CalculationService:
             )
             return False
 
-        slope, intercept = linear_fit(diameter_list, rn_sqrt_list)
+        try:
+            slope, intercept = inverse_diameter_linear_fit(diameter_list, rn_sqrt_list)
+        except (ListsNotSameLength, ValueError, ZeroDivisionError):
+            QtWidgets.QMessageBox.warning(
+                None,
+                "Не корректные данные!",
+                "Для аппроксимации нужны минимум две точки с различными положительными диаметрами",
+            )
+            return False
         if slope < 0:
             self.has_invalid_approximation = True
             QtWidgets.QMessageBox.warning(None, "Предупреждение", "Проверьте корректность введённых значений!")

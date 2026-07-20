@@ -1,11 +1,47 @@
 import contextlib
+from contextlib import contextmanager
 
 import numpy as np
 import pyqtgraph as pg
+from pyqtgraph.exporters import ImageExporter, SVGExporter
+from pyqtgraph.GraphicsScene import exportDialog as pg_export_dialog
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from domain.constants import PLOT_COLORS, DataTableColumns, ParamTableColumns
 from domain.errors import ListsNotSameLength
 from domain.utils import drop_nans, linear
+
+SCREEN_AXIS_LABEL_SIZE = "20px"
+SCREEN_TICK_FONT_SIZE = 12
+SCREEN_LEGEND_TEXT_SIZE = "12pt"
+EXPORT_AXIS_LABEL_SIZE = "30px"
+EXPORT_TICK_FONT_SIZE = 18
+EXPORT_LEGEND_TEXT_SIZE = "20pt"
+EXPORT_SOURCE_BOTTOM_PADDING = 14.0
+
+
+class StyledExportDialog(pg_export_dialog.ExportDialog):
+    """Apply the larger plot profile only while a visual exporter renders."""
+
+    def __init__(self, scene, plot_service) -> None:
+        self.plot_service = plot_service
+        super().__init__(scene)
+
+    def exportFormatChanged(self, item, prev):  # noqa: N802 - Qt override
+        super().exportFormatChanged(item, prev)
+        exporter = self.currentExporter
+        if exporter is None or not isinstance(exporter, (ImageExporter, SVGExporter)):
+            return
+        if getattr(exporter, "_rns_export_style_wrapped", False):
+            return
+
+        original_export = exporter.export
+
+        def styled_export(*args, **kwargs):
+            return self.plot_service.export_visual(exporter, original_export, *args, **kwargs)
+
+        exporter.export = styled_export
+        exporter._rns_export_style_wrapped = True
 
 
 class PlotService:
@@ -26,11 +62,119 @@ class PlotService:
         y_label = "1/√Rₙ"
         x_label = "Диаметр ACAD (μm)"
         self.plot.setBackground("w")
-        styles = {"color": "#413C58", "font-size": "15px"}
-        self.plot.setLabel("left", y_label, **styles)
-        self.plot.setLabel("bottom", x_label, **styles)
-        self.plot.addLegend()
+        self.plot.setLabel("left", y_label, color="#413C58")
+        self.plot.setLabel("bottom", x_label, color="#413C58")
+        plot_item = self.plot.getPlotItem()
+        if plot_item.legend is None:
+            self.plot.addLegend()
+        self.apply_font_profile(
+            axis_label_size=SCREEN_AXIS_LABEL_SIZE,
+            tick_font_size=SCREEN_TICK_FONT_SIZE,
+            legend_text_size=SCREEN_LEGEND_TEXT_SIZE,
+        )
+        self.configure_export_dialog()
         self.plot.showGrid(x=True, y=True)
+
+    def configure_export_dialog(self) -> None:
+        scene = self.plot.scene()
+        if not isinstance(getattr(scene, "exportDialog", None), StyledExportDialog):
+            scene.exportDialog = StyledExportDialog(scene, self)
+
+    def apply_font_profile(self, axis_label_size: str, tick_font_size: int, legend_text_size: str) -> None:
+        plot_item = self.plot.getPlotItem()
+        for name in ("left", "bottom"):
+            axis = plot_item.getAxis(name)
+            label_style = dict(getattr(axis, "labelStyle", {}))
+            label_style["font-size"] = axis_label_size
+            axis.setLabel(
+                axis.labelText,
+                units=axis.labelUnits,
+                unitPrefix=axis.labelUnitPrefix,
+                **label_style,
+            )
+            tick_font = QtGui.QFont(axis.style.get("tickFont") or QtGui.QFont())
+            tick_font.setPointSize(tick_font_size)
+            axis.setTickFont(tick_font)
+
+        if plot_item.legend is not None:
+            plot_item.legend.setLabelTextSize(legend_text_size)
+        self._refresh_plot_layout()
+
+    def _refresh_plot_layout(self) -> None:
+        """Recalculate axis geometry before rendering after a font change."""
+
+        plot_item = self.plot.getPlotItem()
+        for name in ("left", "bottom"):
+            plot_item.getAxis(name).updateGeometry()
+        plot_item.layout.invalidate()
+        plot_item.layout.activate()
+        plot_item.updateGeometry()
+        self.plot.scene().update()
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.processEvents(QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+
+    @contextmanager
+    def export_font_profile(self):
+        plot_item = self.plot.getPlotItem()
+        axes_state = {}
+        for name in ("left", "bottom"):
+            axis = plot_item.getAxis(name)
+            tick_font = axis.style.get("tickFont")
+            axes_state[name] = {
+                "label_style": dict(getattr(axis, "labelStyle", {})),
+                "tick_font": QtGui.QFont(tick_font) if tick_font is not None else None,
+                "size": axis.width() if name == "left" else axis.height(),
+            }
+        legend_size = plot_item.legend.labelTextSize() if plot_item.legend is not None else None
+
+        self.apply_font_profile(
+            axis_label_size=EXPORT_AXIS_LABEL_SIZE,
+            tick_font_size=EXPORT_TICK_FONT_SIZE,
+            legend_text_size=EXPORT_LEGEND_TEXT_SIZE,
+        )
+        # AxisItem reserves only 80% of the rich-text label bounding box by
+        # default. That is acceptable for small labels but clips large export
+        # labels, so reserve the missing space explicitly while rendering.
+        bottom_axis = plot_item.getAxis("bottom")
+        bottom_axis.setHeight(bottom_axis.height() + max(6.0, bottom_axis.label.boundingRect().height() * 0.25))
+        self._refresh_plot_layout()
+        try:
+            yield
+        finally:
+            for name, state in axes_state.items():
+                axis = plot_item.getAxis(name)
+                axis.setLabel(
+                    axis.labelText,
+                    units=axis.labelUnits,
+                    unitPrefix=axis.labelUnitPrefix,
+                    **state["label_style"],
+                )
+                axis.setTickFont(state["tick_font"])
+                if name == "left":
+                    axis.setWidth(state["size"])
+                else:
+                    axis.setHeight(state["size"])
+            if plot_item.legend is not None and legend_size is not None:
+                plot_item.legend.setLabelTextSize(legend_size)
+            self._refresh_plot_layout()
+
+    def export_visual(self, exporter, export_callable, *args, **kwargs):
+        """Render a visual exporter with large fonts and a safe bottom margin."""
+
+        original_source_rect = exporter.getSourceRect
+
+        def padded_source_rect():
+            source_rect = QtCore.QRectF(original_source_rect())
+            source_rect.setBottom(source_rect.bottom() + EXPORT_SOURCE_BOTTOM_PADDING)
+            return source_rect
+
+        exporter.getSourceRect = padded_source_rect
+        try:
+            with self.export_font_profile():
+                return export_callable(*args, **kwargs)
+        finally:
+            exporter.getSourceRect = original_source_rect
 
     def apply_theme(self, dark: bool):
         bg = "#121212" if dark else "#FFFFFF"

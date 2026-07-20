@@ -3,35 +3,67 @@ import numpy as np
 from .errors import ListsNotSameLength
 
 
+def weighted_linear_fit(x, y, residual_weights):
+    """Fit ``y = slope*x + intercept`` using residual multipliers.
+
+    ``residual_weights`` are the multipliers applied to residuals, therefore
+    the minimized objective is ``sum((weight * residual) ** 2)``.  This is the
+    same convention used by ``numpy.polyfit(..., w=...)``.
+    """
+
+    x_values = np.asarray(x, dtype=float)
+    y_values = np.asarray(y, dtype=float)
+    weights = np.asarray(residual_weights, dtype=float)
+    if x_values.ndim != 1 or y_values.ndim != 1 or weights.ndim != 1:
+        raise ValueError("Fit inputs must be one-dimensional")
+    if not (len(x_values) == len(y_values) == len(weights)):
+        raise ListsNotSameLength
+
+    finite = np.isfinite(x_values) & np.isfinite(y_values) & np.isfinite(weights) & (weights > 0)
+    x_values = x_values[finite]
+    y_values = y_values[finite]
+    weights = weights[finite]
+    if len(x_values) < 2 or np.unique(x_values).size < 2:
+        raise ValueError("At least two points with distinct x values are required")
+
+    objective_weights = weights**2
+    total_weight = np.sum(objective_weights)
+    x_mean = np.sum(objective_weights * x_values) / total_weight
+    y_mean = np.sum(objective_weights * y_values) / total_weight
+    centered_x = x_values - x_mean
+    denominator = np.sum(objective_weights * centered_x**2)
+    if denominator == 0:
+        raise ValueError("Cannot fit data with zero weighted x variance")
+
+    slope = np.sum(objective_weights * centered_x * (y_values - y_mean)) / denominator
+    intercept = y_mean - slope * x_mean
+    return float(slope), float(intercept)
+
+
 def linear_fit(x, y):
-    def mean(xs):
-        return sum(xs) / len(xs)
+    """Unweighted least-squares fit kept for callers that explicitly need OLS."""
 
-    m_x = mean(x)
-    m_y = mean(y)
+    return weighted_linear_fit(x, y, np.ones(len(x), dtype=float))
 
-    def std(xs, m):
-        normalizer = len(xs) - 1
-        return np.sqrt(sum((pow(x1 - m, 2) for x1 in xs)) / normalizer)
 
-    def pearson_r(xs, ys):
-        sum_xy = 0
-        sum_sq_v_x = 0
-        sum_sq_v_y = 0
+def inverse_diameter_linear_fit(diameters, y):
+    """Fit using ``1 / diameter`` residual multipliers.
 
-        for x1, y2 in zip(xs, ys):
-            var_x = x1 - m_x
-            var_y = y2 - m_y
-            sum_xy += var_x * var_y
-            sum_sq_v_x += pow(var_x, 2)
-            sum_sq_v_y += pow(var_y, 2)
-        return sum_xy / np.sqrt(sum_sq_v_x * sum_sq_v_y)
+    Consequently the coefficient in the weighted least-squares sum is
+    ``1 / diameter**2``. Empty, non-finite and non-positive diameters are not
+    valid measurements for this fit and are excluded together with their y.
+    """
 
-    r = pearson_r(x, y)
-
-    slope = r * (std(y, m_y) / std(x, m_x))
-    intercept = m_y - slope * m_x
-    return slope, intercept
+    diameter_values = np.asarray(diameters, dtype=float)
+    y_values = np.asarray(y, dtype=float)
+    if diameter_values.ndim != 1 or y_values.ndim != 1:
+        raise ValueError("Fit inputs must be one-dimensional")
+    if len(diameter_values) != len(y_values):
+        raise ListsNotSameLength
+    valid = np.isfinite(diameter_values) & np.isfinite(y_values) & (diameter_values > 0)
+    diameter_values = diameter_values[valid]
+    y_values = y_values[valid]
+    return weighted_linear_fit(diameter_values, y_values, 1.0 / diameter_values)
 
 
 def linear(x: float, b: float, a: float):

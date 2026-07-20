@@ -22,7 +22,7 @@ from ui.update_dialogs import FetchReleasesWorker, ReleasePickerDialog
 from ui.widgets import CellWidget, DataTable, ParamTable
 
 logger = logging.getLogger(__name__)
-CURRENT_DOCK_LAYOUT_VERSION = 2
+CURRENT_DOCK_LAYOUT_VERSION = 3
 
 
 class RnSApp(QtWidgets.QMainWindow):
@@ -250,12 +250,8 @@ class RnSApp(QtWidgets.QMainWindow):
         bottom_right_area = self.dock_manager.addDockWidget(
             DockWidgetArea.BottomDockWidgetArea, self.calc_dock, right_area
         )
-        actions_area = self.dock_manager.addDockWidget(
-            DockWidgetArea.RightDockWidgetArea, self.inputs_dock, bottom_right_area
-        )
-        with contextlib.suppress(Exception):
-            self.dock_manager.addDockWidgetTabToArea(self.area_calc_dock, actions_area)
-            self.inputs_dock.setAsCurrentTab()
+        self.dock_manager.addDockWidget(DockWidgetArea.BottomDockWidgetArea, self.area_calc_dock, bottom_right_area)
+        self.dock_manager.addDockWidget(DockWidgetArea.RightDockWidgetArea, self.inputs_dock, bottom_right_area)
 
         self.dock_widgets = (
             self.data_dock,
@@ -275,7 +271,9 @@ class RnSApp(QtWidgets.QMainWindow):
             except Exception:
                 pass
 
-        # Save default dock layout state for restoring on demand
+        self._apply_default_dock_sizes()
+
+        # Save the new versioned default dock layout for restoring on demand.
         with contextlib.suppress(Exception):
             self.default_dock_state = self.dock_manager.saveState()
 
@@ -383,6 +381,23 @@ class RnSApp(QtWidgets.QMainWindow):
                 self.dock_manager.restoreState(self.default_dock_state)
                 self.save_settings()
 
+    def _apply_default_dock_sizes(self) -> None:
+        """Approximate the reference 1920x1039 layout using splitter ratios."""
+
+        with contextlib.suppress(Exception):
+            containers = self.dock_manager.dockContainers()
+            if containers:
+                containers[0].rootSplitter().setSizes([1, 2])
+
+        with contextlib.suppress(Exception):
+            self.data_dock.dockAreaWidget().parentSplitter().setSizes([5, 4])
+
+        with contextlib.suppress(Exception):
+            self.plot_dock.dockAreaWidget().parentSplitter().setSizes([12, 2, 1])
+
+        with contextlib.suppress(Exception):
+            self.calc_dock.dockAreaWidget().parentSplitter().setSizes([1, 1])
+
     # ----- Settings helpers for file dialogs -----
     def _get_initial_directory(self) -> str:
         """Return a starting directory for file dialogs.
@@ -446,9 +461,10 @@ class RnSApp(QtWidgets.QMainWindow):
         settings.beginGroup("DockManager")
         state = settings.value("state")
         layout_version = settings.value("layout_version", 0, type=int)
+        restored_layout = False
         if state and layout_version == CURRENT_DOCK_LAYOUT_VERSION:
             with contextlib.suppress(Exception):
-                self.dock_manager.restoreState(state)
+                restored_layout = bool(self.dock_manager.restoreState(state))
         settings.endGroup()
 
         settings.beginGroup("DataTable")
@@ -462,6 +478,7 @@ class RnSApp(QtWidgets.QMainWindow):
         with contextlib.suppress(Exception):
             self.set_sample_size_input_mode(mode, save=False)
         settings.endGroup()
+        return restored_layout
 
     def restore_default_layout(self):
         # Restore dock layout to the default captured state
@@ -603,7 +620,10 @@ class RnSApp(QtWidgets.QMainWindow):
         with contextlib.suppress(Exception):
             self.save_settings()
         for window in QApplication.topLevelWidgets():
-            window.close()
+            if window is self:
+                continue
+            with contextlib.suppress(Exception):
+                window.close()
         super().closeEvent(event)
 
     def _start_download_update(self, url: str):
