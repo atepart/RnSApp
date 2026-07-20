@@ -50,6 +50,8 @@ class PlotServiceStyleTests(unittest.TestCase):
         assert plot_item.legend.labelTextSize() == legend_size
 
     def test_prepare_plot_applies_screen_profile_and_custom_export_dialog(self):
+        assert int(SCREEN_LEGEND_TEXT_SIZE.removesuffix("pt")) >= 16
+        assert int(EXPORT_LEGEND_TEXT_SIZE.removesuffix("pt")) >= 26
         self._assert_profile(SCREEN_AXIS_LABEL_SIZE, SCREEN_TICK_FONT_SIZE, SCREEN_LEGEND_TEXT_SIZE)
         assert isinstance(self.plot.scene().exportDialog, StyledExportDialog)
 
