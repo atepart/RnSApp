@@ -4,13 +4,15 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import openpyxl
+from openpyxl.cell.cell import Cell
 from openpyxl.chart import Reference, ScatterChart, Series
 from openpyxl.chart.axis import ChartLines
+from openpyxl.chart.data_source import NumData, NumVal
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
-from openpyxl.styles import Alignment, Border, Font, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from domain.constants import BLUE, RED, DataTableColumns, ParamTableColumns
@@ -26,6 +28,29 @@ from domain.utils import (
     drop_nans,
     inverse_diameter_linear_fit,
 )
+
+XLSX_HEADER_INPUT_COLOR = "1F4E78"
+XLSX_HEADER_CALCULATED_COLOR = "0F6B78"
+XLSX_HEADER_WEIGHT_COLOR = "6A4C93"
+XLSX_HEADER_RESULTS_COLOR = "3B6E48"
+XLSX_HEADER_METADATA_COLOR = "455A64"
+XLSX_INPUT_FILL_COLOR = "FFF4CC"
+XLSX_CALCULATED_FILL_COLOR = "EAF4F8"
+XLSX_WEIGHT_FILL_COLOR = "F1ECFA"
+XLSX_RESULTS_FILL_COLOR = "E6F4EA"
+XLSX_IDENTIFIER_FILL_COLOR = "F3F6F9"
+XLSX_BORDER_COLOR = "D9E2F3"
+
+
+def _solid_fill(color: str) -> PatternFill:
+    return PatternFill(fill_type="solid", fgColor=color)
+
+
+def _style_header(cell: Cell, color: str) -> None:
+    cell.fill = _solid_fill(color)
+    cell.font = Font(bold=True, color="FFFFFF")
+    cell.border = Border(bottom=Side(style="medium", color=color))
+    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
 
 def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, ...]]):
@@ -75,16 +100,37 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, ...]]):
                 cell.number_format = "0.000"
             if is_header:
                 cell.border = Border(
-                    right=Side(style="thick"), left=Side(style="thick"), top=Side("thick"), bottom=Side(style="thick")
+                    right=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                    left=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                    top=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                    bottom=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
                 )
-                cell.font = Font(bold=True)
+                cell.fill = _solid_fill(XLSX_HEADER_INPUT_COLOR)
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
             elif row_ind % row_group_size == 0:
-                cell.border = Border(right=Side(style="thick"), left=Side(style="thick"), bottom=Side(style="thick"))
+                cell.fill = _solid_fill(XLSX_RESULTS_FILL_COLOR)
+                cell.border = Border(
+                    right=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                    left=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                    bottom=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                )
             else:
-                cell.border = Border(right=Side(style="thick"), left=Side(style="thick"))
+                cell.fill = _solid_fill(XLSX_IDENTIFIER_FILL_COLOR)
+                cell.border = Border(
+                    right=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                    left=Side(style="medium", color=XLSX_HEADER_INPUT_COLOR),
+                )
 
     for row in ws_cells.rows:
-        ws_cells.row_dimensions[row[0].row].height = 21
+        is_header = (row[0].row - 1) % row_group_size == 0
+        ws_cells.row_dimensions[row[0].row].height = 34 if is_header else 23
+
+    ws_cells.sheet_view.showGridLines = False
 
     # Autofit columns so long cell names/values are fully visible
     def _autofit(col_idx: int, extra: int = 2, min_width: int = 12):
@@ -96,7 +142,10 @@ def _export_cells_grid(ws_cells, cell_grid_values: List[Tuple[str, ...]]):
             max_len = max(max_len, len(str(val)))
         if max_len == 0:
             return
-        ws_cells.column_dimensions[get_column_letter(col_idx)].width = max(max_len + extra, min_width)
+        ws_cells.column_dimensions[get_column_letter(col_idx)].width = min(
+            max(max_len + extra, min_width),
+            36,
+        )
 
     for col_idx in range(1, ws_cells.max_column + 1):
         _autofit(col_idx)
@@ -175,6 +224,18 @@ class XlsxCellIO(CellDataIO):
             DataTableColumns.SQUARE,
             DataTableColumns.RN_SQRT,
         ]
+        input_data_columns = {
+            DataTableColumns.NUMBER,
+            DataTableColumns.NAME,
+            DataTableColumns.SELECT,
+            DataTableColumns.DIAMETER,
+            DataTableColumns.RESISTANCE,
+        }
+        identifier_columns = {
+            DataTableColumns.NUMBER,
+            DataTableColumns.NAME,
+            DataTableColumns.SELECT,
+        }
 
         def _coerce_value(val, dtype):
             # Convert values to proper numeric types so Excel treats them as numbers
@@ -225,19 +286,20 @@ class XlsxCellIO(CellDataIO):
         for cell_data in repo:
             sheet_name = _compose_cell_sheet_title(cell_data.cell, cell_data.name, wb.sheetnames)
             ws = wb.create_sheet(sheet_name)
+            ws.sheet_view.showGridLines = False
 
             # Write data header (row 1) with styling; widths will be autofit below
             for col_idx, col_def in enumerate(export_data_columns, start=1):
                 hcell = ws.cell(row=1, column=col_idx, value=col_def.slug)
-                hcell.font = Font(bold=True)
-                hcell.border = Border(bottom=Side(style="medium"))
-                hcell.alignment = Alignment(horizontal="center", vertical="center")
+                if col_def in input_data_columns:
+                    header_color = XLSX_HEADER_INPUT_COLOR
+                else:
+                    header_color = XLSX_HEADER_CALCULATED_COLOR
+                _style_header(hcell, header_color)
 
             weight_col_idx = len(export_data_columns) + 1
             weight_header = ws.cell(row=1, column=weight_col_idx, value=WEIGHT_HEADER)
-            weight_header.font = Font(bold=True)
-            weight_header.border = Border(bottom=Side(style="medium"))
-            weight_header.alignment = Alignment(horizontal="center", vertical="center")
+            _style_header(weight_header, XLSX_HEADER_WEIGHT_COLOR)
 
             # Write data values from InitialDataItemList
             # Determine how many rows are present in initial data
@@ -272,9 +334,7 @@ class XlsxCellIO(CellDataIO):
             results_start_col = weight_col_idx + 2
             for i, param in enumerate(results_params, start=0):
                 hcell = ws.cell(row=1, column=results_start_col + i, value=param.name)
-                hcell.font = Font(bold=True)
-                hcell.border = Border(bottom=Side(style="medium"))
-                hcell.alignment = Alignment(horizontal="center", vertical="center")
+                _style_header(hcell, XLSX_HEADER_RESULTS_COLOR)
 
                 # Value row (2)
                 raw_value = getattr(cell_data, param.slug, "")
@@ -286,9 +346,7 @@ class XlsxCellIO(CellDataIO):
 
             mean_excluded_col = results_start_col + len(results_params)
             hcell = ws.cell(row=1, column=mean_excluded_col, value=MEAN_EXCLUDED_HEADER)
-            hcell.font = Font(bold=True)
-            hcell.border = Border(bottom=Side(style="medium"))
-            hcell.alignment = Alignment(horizontal="center", vertical="center")
+            _style_header(hcell, XLSX_HEADER_METADATA_COLOR)
             vcell = ws.cell(
                 row=2,
                 column=mean_excluded_col,
@@ -297,9 +355,7 @@ class XlsxCellIO(CellDataIO):
             vcell.alignment = Alignment(horizontal="center", vertical="center")
             mode_col = mean_excluded_col + 1
             hcell = ws.cell(row=1, column=mode_col, value=SAMPLE_SIZE_INPUT_MODE_HEADER)
-            hcell.font = Font(bold=True)
-            hcell.border = Border(bottom=Side(style="medium"))
-            hcell.alignment = Alignment(horizontal="center", vertical="center")
+            _style_header(hcell, XLSX_HEADER_METADATA_COLOR)
             vcell = ws.cell(
                 row=2,
                 column=mode_col,
@@ -308,7 +364,12 @@ class XlsxCellIO(CellDataIO):
             vcell.alignment = Alignment(horizontal="center", vertical="center")
 
             # Autofit widths for data and results columns based on content
-            def _autofit(col_idx: int, extra: int = 2, min_width: int = 10):
+            def _autofit(
+                col_idx: int,
+                extra: int = 2,
+                min_width: int = 10,
+                max_width: int = 24,
+            ):
                 try:
                     max_len = 0
                     for r in range(1, ws.max_row + 1):
@@ -316,17 +377,23 @@ class XlsxCellIO(CellDataIO):
                         if val is None:
                             continue
                         max_len = max(max_len, len(str(val)))
-                    ws.column_dimensions[get_column_letter(col_idx)].width = max(max_len + extra, min_width)
+                    ws.column_dimensions[get_column_letter(col_idx)].width = min(
+                        max(max_len + extra, min_width), max_width
+                    )
                 except Exception:
                     pass
 
-            for col_idx in range(1, len(export_data_columns) + 1):
-                _autofit(col_idx)
-            _autofit(weight_col_idx)
+            for col_idx, col_def in enumerate(export_data_columns, start=1):
+                max_width = 30 if col_def is DataTableColumns.NAME else 22
+                _autofit(col_idx, max_width=max_width)
+            _autofit(weight_col_idx, max_width=16)
             for i, _ in enumerate(results_params, start=0):
-                _autofit(results_start_col + i)
-            _autofit(mean_excluded_col)
-            _autofit(mode_col)
+                _autofit(results_start_col + i, max_width=24)
+            _autofit(mean_excluded_col, max_width=18)
+            _autofit(mode_col, max_width=24)
+            ws.column_dimensions[get_column_letter(weight_col_idx + 1)].width = 3
+            ws.freeze_panes = "A2"
+            ws.row_dimensions[1].height = 36
 
             # Column mapping for clarity (Excel letters)
             results_row = 2
@@ -374,6 +441,53 @@ class XlsxCellIO(CellDataIO):
             # InitialDataItem rows are zero-based and are written with a +2
             # offset, so the final table row is max_row_index + 2.
             data_max_row = max(2, max_row_index + 2)
+
+            body_border = Border(bottom=Side(style="thin", color=XLSX_BORDER_COLOR))
+            for row in range(2, data_max_row + 1):
+                for column, col_def in enumerate(export_data_columns, start=1):
+                    data_cell = ws.cell(row=row, column=column)
+                    if col_def in identifier_columns:
+                        data_cell.fill = _solid_fill(XLSX_IDENTIFIER_FILL_COLOR)
+                    elif col_def in input_data_columns:
+                        data_cell.fill = _solid_fill(XLSX_INPUT_FILL_COLOR)
+                    else:
+                        data_cell.fill = _solid_fill(XLSX_CALCULATED_FILL_COLOR)
+                    data_cell.border = body_border
+                    horizontal_alignment = "left" if col_def is DataTableColumns.NAME else "center"
+                    data_cell.alignment = Alignment(
+                        horizontal=horizontal_alignment,
+                        vertical="center",
+                    )
+
+                weight_cell = ws.cell(row=row, column=weight_col_idx)
+                weight_cell.fill = _solid_fill(XLSX_WEIGHT_FILL_COLOR)
+                weight_cell.border = body_border
+                weight_cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                )
+
+            results_end_col = results_start_col + len(results_params)
+            for column in range(results_start_col, results_end_col):
+                result_cell = ws.cell(row=results_row, column=column)
+                result_cell.fill = _solid_fill(XLSX_RESULTS_FILL_COLOR)
+                result_cell.border = body_border
+                result_cell.font = Font(bold=True, color=XLSX_HEADER_RESULTS_COLOR)
+                result_cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                )
+
+            for column in (mean_excluded_col, mode_col):
+                metadata_cell = ws.cell(row=results_row, column=column)
+                metadata_cell.fill = _solid_fill(XLSX_IDENTIFIER_FILL_COLOR)
+                metadata_cell.border = body_border
+                metadata_cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                )
+
+            ws.auto_filter.ref = f"A1:{get_column_letter(weight_col_idx)}{data_max_row}"
 
             slope_ref = result_ref(ParamTableColumns.SLOPE)
             intercept_ref = result_ref(ParamTableColumns.INTERCEPT)
@@ -598,8 +712,10 @@ class XlsxCellIO(CellDataIO):
 
                 chart = ScatterChart()
                 chart.title = "Rn^-0.5 vs Диаметр ACAD (μm)"
-                # Show only markers (points) to avoid spurious lines/series
-                chart.scatterStyle = "marker"
+                # Enable lines at chart level so the weighted fit series is
+                # visible immediately; the data series overrides its own line
+                # with noFill and therefore remains markers-only.
+                chart.scatterStyle = "lineMarker"
                 chart.style = 2
                 chart.x_axis.title = "Диаметр ACAD (μm)"
                 chart.y_axis.title = "Rn^-0.5"
@@ -688,6 +804,26 @@ class XlsxCellIO(CellDataIO):
                         fit_x_values = Reference(ws, min_col=fit_x_col, min_row=2, max_row=3)
                         fit_y_values = Reference(ws, min_col=fit_y_col, min_row=2, max_row=3)
                         fit_series = Series(fit_y_values, fit_x_values, title="Fit (w=1/D)")
+                        fit_x_cache = (fit_min, fit_max)
+                        fit_x_points = [NumVal(idx=index, v=value) for index, value in enumerate(fit_x_cache)]
+                        fit_series.xVal.numRef.numCache = NumData(
+                            formatCode="General",
+                            ptCount=2,
+                            pt=fit_x_points,
+                        )
+                        fit_slope = float(getattr(cell_data, "slope", np.nan))
+                        fit_intercept = float(getattr(cell_data, "intercept", np.nan))
+                        if np.isfinite(fit_slope) and np.isfinite(fit_intercept):
+                            cached_fit_y = (
+                                fit_slope * fit_min + fit_intercept,
+                                fit_slope * fit_max + fit_intercept,
+                            )
+                            fit_y_points = [NumVal(idx=index, v=value) for index, value in enumerate(cached_fit_y)]
+                            fit_series.yVal.numRef.numCache = NumData(
+                                formatCode="General",
+                                ptCount=2,
+                                pt=fit_y_points,
+                            )
                         fit_series.marker = Marker(symbol="none")
                         red = RED.lstrip("#").upper()
                         fit_series.graphicalProperties.line.solidFill = red
