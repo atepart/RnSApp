@@ -131,8 +131,21 @@ class XlsxWeightedFitTests(unittest.TestCase):
                 "_WLS sum wD2",
                 "_WLS sum wDY",
             }
-            for column in wls_helper_cols.values():
-                assert "SUMPRODUCT" in sheet.cell(row=2, column=column).value
+            diameter_letter = sheet.cell(row=1, column=headers[DataTableColumns.DIAMETER.slug]).column_letter
+            rn_sqrt_letter = sheet.cell(row=1, column=headers[DataTableColumns.RN_SQRT.slug]).column_letter
+            weight_range = f"{weight_letter}2:{weight_letter}7"
+            diameter_range = f"{diameter_letter}2:{diameter_letter}7"
+            rn_sqrt_range = f"{rn_sqrt_letter}2:{rn_sqrt_letter}7"
+            expected_helper_formulas = {
+                "_WLS sum w": f"=SUMPRODUCT({weight_range},{weight_range})",
+                "_WLS sum wD": (f"=SUMPRODUCT({weight_range},{weight_range},{diameter_range})"),
+                "_WLS sum wY": (f"=SUMPRODUCT({weight_range},{weight_range},{rn_sqrt_range})"),
+                "_WLS sum wD2": (f"=SUMPRODUCT({weight_range},{weight_range},{diameter_range},{diameter_range})"),
+                "_WLS sum wDY": (f"=SUMPRODUCT({weight_range},{weight_range},{diameter_range},{rn_sqrt_range})"),
+            }
+            for header, formula in expected_helper_formulas.items():
+                assert sheet.cell(row=2, column=wls_helper_cols[header]).value == formula
+                assert "IFERROR" not in formula
             assert sheet.cell(row=2, column=wls_helper_cols["_WLS sum w"]).coordinate in slope_formula
             assert sheet.cell(row=2, column=wls_helper_cols["_WLS sum wDY"]).coordinate in slope_formula
             assert "SLOPE(" not in slope_formula
@@ -140,6 +153,7 @@ class XlsxWeightedFitTests(unittest.TestCase):
 
             assert len(sheet._charts) == 1
             assert len(sheet._charts[0].series) == 2
+            assert sheet._charts[0].visible_cells_only is False
             assert sheet._charts[0].scatterStyle == "lineMarker"
             assert sheet._charts[0].series[0].trendline is None
             fit_series = sheet._charts[0].series[1]

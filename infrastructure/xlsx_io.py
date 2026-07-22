@@ -526,14 +526,25 @@ class XlsxCellIO(CellDataIO):
 
             # Results formulas (slope/intercept/drift/RnS/errors/real areas) with IFERROR guards
             if rn_sqrt_range and diameter_range:
-                squared_weights = f"IFERROR({weight_range}^2,0)"
                 helper_start_col = mode_col + 3
                 helper_specs = (
-                    ("_WLS sum w", f"=SUMPRODUCT({squared_weights})"),
-                    ("_WLS sum wD", f"=SUMPRODUCT({squared_weights},{diameter_range})"),
-                    ("_WLS sum wY", f"=SUMPRODUCT({squared_weights},{rn_sqrt_range})"),
-                    ("_WLS sum wD2", f"=SUMPRODUCT({squared_weights},{diameter_range},{diameter_range})"),
-                    ("_WLS sum wDY", f"=SUMPRODUCT({squared_weights},{diameter_range},{rn_sqrt_range})"),
+                    ("_WLS sum w", f"=SUMPRODUCT({weight_range},{weight_range})"),
+                    (
+                        "_WLS sum wD",
+                        f"=SUMPRODUCT({weight_range},{weight_range},{diameter_range})",
+                    ),
+                    (
+                        "_WLS sum wY",
+                        f"=SUMPRODUCT({weight_range},{weight_range},{rn_sqrt_range})",
+                    ),
+                    (
+                        "_WLS sum wD2",
+                        f"=SUMPRODUCT({weight_range},{weight_range},{diameter_range},{diameter_range})",
+                    ),
+                    (
+                        "_WLS sum wDY",
+                        f"=SUMPRODUCT({weight_range},{weight_range},{diameter_range},{rn_sqrt_range})",
+                    ),
                 )
                 helper_refs = []
                 for offset, (header, formula) in enumerate(helper_specs):
@@ -712,6 +723,10 @@ class XlsxCellIO(CellDataIO):
 
                 chart = ScatterChart()
                 chart.title = "Rn^-0.5 vs Диаметр ACAD (μm)"
+                # Excel skips chart series sourced from hidden cells unless
+                # plotVisOnly is disabled. The fit helper columns stay hidden
+                # to keep the exported sheet tidy, but must still be plotted.
+                chart.visible_cells_only = False
                 # Enable lines at chart level so the weighted fit series is
                 # visible immediately; the data series overrides its own line
                 # with noFill and therefore remains markers-only.
