@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-07-22
+
+### Изменено
+
+- `WORK-20260720-5` — XLSX рассчитывает weighted linear fit собственной
+  аналитической формулой через пять скрытых сумм `Σw`, `ΣwD`, `ΣwY`, `ΣwD²` и
+  `ΣwDY`; критерий остался согласован с приложением:
+  `Σ(1/D²)·(Y-slope·D-intercept)²`.
+
+### Исправлено
+
+- `WORK-20260720-5`, `BUG-20260720-2` — выбранные строки без числового
+  `1/√Rₙ` больше не получают вес `1/D` и не попадают в Excel fit как ложные
+  точки с `Y=0`. Контрольный файл после пересчёта дал ожидаемые
+  slope/intercept `0,0500000392 / 0,1000007326` без ошибок формул.
+
+Проверки `WORK-20260720-5`: 7 релевантных тестов и полный unittest-набор
+пройдены; Black 23.7.0, isort 5.12.0, критические правила Ruff и
+`git diff --check` пройдены. Нативный macOS Cocoa-сценарий с расчётом, записью,
+графиком и экспортом XLSX пройден. Артефакты:
+`/tmp/rns-weighted-excel-cocoa/01-calculated-layout.png`,
+`/tmp/rns-weighted-excel-cocoa/02-recorded-cell-and-legend.png`,
+`/tmp/rns-weighted-excel-cocoa/04-weighted-fit.xlsx` и
+`/tmp/rns-weighted-repo-final/rns-weighted-excel-missing-rn-diagnostic.xlsx`.
+Полный Ruff-check имеет существующий baseline из 792 нарушений, вынесенный в
+`BACKLOG-20260720-1`.
+
 ## 2026-07-20
 
 ### Добавлено

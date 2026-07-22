@@ -399,33 +399,58 @@ class XlsxCellIO(CellDataIO):
 
             for row in range(2, data_max_row + 1):
                 diameter_ref = data_ref(DataTableColumns.DIAMETER, row)
+                rn_sqrt_ref = data_ref(DataTableColumns.RN_SQRT, row)
                 selected_condition = "TRUE"
                 if select_col_idx:
                     selected_condition = data_ref(DataTableColumns.SELECT, row)
                 weight_cell = ws.cell(row=row, column=weight_col_idx)
                 weight_cell.value = (
-                    f"=IF(AND({selected_condition},ISNUMBER({diameter_ref}),{diameter_ref}>0)," f'1/{diameter_ref},"")'
+                    f"=IF(AND({selected_condition},ISNUMBER({diameter_ref}),{diameter_ref}>0,"
+                    f'ISNUMBER({rn_sqrt_ref})),1/{diameter_ref},"")'
                 )
                 weight_cell.number_format = "0.000000"
 
             # Results formulas (slope/intercept/drift/RnS/errors/real areas) with IFERROR guards
             if rn_sqrt_range and diameter_range:
                 squared_weights = f"IFERROR({weight_range}^2,0)"
-                weight_sum = f"SUMPRODUCT({squared_weights})"
-                x_mean = f"SUMPRODUCT({squared_weights},{diameter_range})/{weight_sum}"
-                y_mean = f"SUMPRODUCT({squared_weights},{rn_sqrt_range})/{weight_sum}"
-                weighted_covariance = (
-                    f"SUMPRODUCT({squared_weights},({diameter_range}-{x_mean}),({rn_sqrt_range}-{y_mean}))"
+                helper_start_col = mode_col + 3
+                helper_specs = (
+                    ("_WLS sum w", f"=SUMPRODUCT({squared_weights})"),
+                    ("_WLS sum wD", f"=SUMPRODUCT({squared_weights},{diameter_range})"),
+                    ("_WLS sum wY", f"=SUMPRODUCT({squared_weights},{rn_sqrt_range})"),
+                    ("_WLS sum wD2", f"=SUMPRODUCT({squared_weights},{diameter_range},{diameter_range})"),
+                    ("_WLS sum wDY", f"=SUMPRODUCT({squared_weights},{diameter_range},{rn_sqrt_range})"),
                 )
-                weighted_x_variance = f"SUMPRODUCT({squared_weights},({diameter_range}-{x_mean})^2)"
+                helper_refs = []
+                for offset, (header, formula) in enumerate(helper_specs):
+                    helper_col = helper_start_col + offset
+                    ws.cell(row=1, column=helper_col, value=header)
+                    helper_cell = ws.cell(row=2, column=helper_col, value=formula)
+                    helper_cell.number_format = "0.0000000000"
+                    ws.column_dimensions[get_column_letter(helper_col)].hidden = True
+                    helper_refs.append(f"{get_column_letter(helper_col)}2")
+
+                (
+                    weight_sum_ref,
+                    weighted_x_sum_ref,
+                    weighted_y_sum_ref,
+                    weighted_x2_sum_ref,
+                    weighted_xy_sum_ref,
+                ) = helper_refs
+                weighted_denominator = f"{weight_sum_ref}*{weighted_x2_sum_ref}-{weighted_x_sum_ref}^2"
+                weighted_slope = (
+                    f"({weight_sum_ref}*{weighted_xy_sum_ref}-{weighted_x_sum_ref}*{weighted_y_sum_ref})/"
+                    f"({weighted_denominator})"
+                )
                 slope_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.SLOPE])
-                slope_cell.value = (
-                    f'=IF(COUNT({weight_range})<2,"",IFERROR({weighted_covariance}/{weighted_x_variance},""))'
-                )
+                slope_cell.value = f'=IF(COUNT({weight_range})<2,"",IFERROR({weighted_slope},""))'
                 slope_cell.number_format = "0.0000"
 
                 intercept_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.INTERCEPT])
-                intercept_cell.value = f'=IF(COUNT({weight_range})<2,"",IFERROR({y_mean}-{slope_ref}*{x_mean},""))'
+                intercept_cell.value = (
+                    f'=IF(COUNT({weight_range})<2,"",'
+                    f'IFERROR(({weighted_y_sum_ref}-{slope_ref}*{weighted_x_sum_ref})/{weight_sum_ref},""))'
+                )
                 intercept_cell.number_format = "0.0000"
 
             drift_cell = ws.cell(row=results_row, column=result_col_idx[ParamTableColumns.DRIFT])

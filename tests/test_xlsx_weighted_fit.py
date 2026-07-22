@@ -21,6 +21,7 @@ class XlsxWeightedFitTests(unittest.TestCase):
             (4.0, 2.0, True),
             (8.0, 1.0, True),
             (0.0, 10.0, True),
+            (16.0, None, True),
         ]
         initial_data = InitialDataItemList()
         for row, (diameter, resistance, selected) in enumerate(rows):
@@ -37,8 +38,8 @@ class XlsxWeightedFitTests(unittest.TestCase):
         repo.update_or_create_item(
             cell=1,
             name="Weighted test",
-            diameter_list=[row[0] for row in rows[:-1]],
-            rn_sqrt_list=[1 / (row[1] ** 0.5) for row in rows[:-1]],
+            diameter_list=[row[0] for row in rows[:4]],
+            rn_sqrt_list=[1 / (row[1] ** 0.5) for row in rows[:4]],
             slope=0.1,
             intercept=0.2,
             drift=-2.0,
@@ -60,14 +61,30 @@ class XlsxWeightedFitTests(unittest.TestCase):
             weight_col = headers[WEIGHT_HEADER]
             assert weight_col == headers[DataTableColumns.RN_SQRT.slug] + 1
             assert "1/D2" in sheet.cell(row=2, column=weight_col).value
+            assert "ISNUMBER(J2)" in sheet.cell(row=2, column=weight_col).value
             assert "D6>0" in sheet.cell(row=6, column=weight_col).value
+            assert "ISNUMBER(J7)" in sheet.cell(row=7, column=weight_col).value
 
             slope_formula = sheet.cell(row=2, column=headers[ParamTableColumns.SLOPE.name]).value
             intercept_formula = sheet.cell(row=2, column=headers[ParamTableColumns.INTERCEPT.name]).value
-            assert "SUMPRODUCT" in slope_formula
-            assert f"{sheet.cell(row=1, column=weight_col).column_letter}2" in slope_formula
+            wls_helper_cols = {
+                sheet.cell(row=1, column=column).value: column
+                for column in range(1, sheet.max_column + 1)
+                if str(sheet.cell(row=1, column=column).value).startswith("_WLS ")
+            }
+            assert set(wls_helper_cols) == {
+                "_WLS sum w",
+                "_WLS sum wD",
+                "_WLS sum wY",
+                "_WLS sum wD2",
+                "_WLS sum wDY",
+            }
+            for column in wls_helper_cols.values():
+                assert "SUMPRODUCT" in sheet.cell(row=2, column=column).value
+            assert sheet.cell(row=2, column=wls_helper_cols["_WLS sum w"]).coordinate in slope_formula
+            assert sheet.cell(row=2, column=wls_helper_cols["_WLS sum wDY"]).coordinate in slope_formula
             assert "SLOPE(" not in slope_formula
-            assert "SUMPRODUCT" in intercept_formula
+            assert sheet.cell(row=2, column=wls_helper_cols["_WLS sum wY"]).coordinate in intercept_formula
 
             assert len(sheet._charts) == 1
             assert len(sheet._charts[0].series) == 2
@@ -77,7 +94,15 @@ class XlsxWeightedFitTests(unittest.TestCase):
                 for column in range(1, sheet.max_column + 1)
                 if sheet.column_dimensions[sheet.cell(row=1, column=column).column_letter].hidden
             }
-            assert hidden_headers == {"_Weighted fit X", "_Weighted fit Y"}
+            assert hidden_headers == {
+                "_Weighted fit X",
+                "_Weighted fit Y",
+                "_WLS sum w",
+                "_WLS sum wD",
+                "_WLS sum wY",
+                "_WLS sum wD2",
+                "_WLS sum wDY",
+            }
 
             loaded_items, load_errors = XlsxCellIO().load(str(output))
             assert load_errors == []
